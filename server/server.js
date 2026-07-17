@@ -28,6 +28,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/meetings', require('./routes/meetings'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/ai', require('./src/modules/ai/routes/ai.routes'));
 
 // Health check
 app.get('/api/health', async (req, res) => {
