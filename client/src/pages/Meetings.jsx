@@ -1,47 +1,13 @@
-import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { meetingAPI } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
-
-function formatDate(dateStr) {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-  });
-}
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import EmptyState from '../components/common/EmptyState';
+import StatusChip from '../components/common/StatusChip';
+import { formatDate } from '../utils/formatDate';
+import { useMeeting } from '../hooks/useMeeting';
 
 export default function Meetings() {
   const navigate = useNavigate();
-  const [meetings, setMeetings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    const fetchMeetings = async () => {
-      try {
-        const res = await meetingAPI.getAll();
-        setMeetings(res.data.meetings);
-      } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load meetings.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchMeetings();
-  }, []);
+  const { meetings, loading, error } = useMeeting();
 
   if (loading) return <LoadingSpinner fullPage />;
 
@@ -93,24 +59,17 @@ export default function Meetings() {
 
       {/* Empty State */}
       {meetings.length === 0 && !error && (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="var(--md-primary)">
-              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-            </svg>
-          </div>
-          <h2>No meetings yet</h2>
-          <p>Upload your first meeting recording to generate an AI-powered transcript.</p>
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={() => navigate('/meetings/upload')}
-          >
+        <EmptyState 
+          title="No meetings yet"
+          description="Upload your first meeting recording to generate an AI-powered transcript."
+          actionLink="/meetings/upload"
+          actionText="Upload Meeting"
+          actionIcon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z" />
             </svg>
-            Upload Meeting
-          </button>
-        </div>
+          }
+        />
       )}
 
       {/* Meeting Cards */}
@@ -163,12 +122,7 @@ export default function Meetings() {
             </div>
 
             {/* Status badge */}
-            <span className={`status-badge ${meeting.status}`}>
-              {meeting.status === 'transcribing' && (
-                <span className="spinner spinner-sm" style={{ width: '12px', height: '12px', borderWidth: '2px', borderTopColor: 'currentColor', borderColor: 'rgba(0,0,0,0.15)' }} />
-              )}
-              {meeting.status.charAt(0).toUpperCase() + meeting.status.slice(1)}
-            </span>
+            <StatusChip status={meeting.status} />
           </Link>
         ))}
       </div>

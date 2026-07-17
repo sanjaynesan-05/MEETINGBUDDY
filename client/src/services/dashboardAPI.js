@@ -1,4 +1,4 @@
-import api from './api';
+import apiClient from './apiClient';
 
 export const dashboardAPI = {
   /**
@@ -6,5 +6,5 @@ export const dashboardAPI = {
    * Contains stats, recent activity, pending actions, top keywords, etc.
    * @returns {Promise<Object>}
    */
-  getDashboardData: () => api.get('/dashboard'),
+  getDashboardData: () => apiClient.get('/dashboard'),
 };

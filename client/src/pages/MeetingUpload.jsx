@@ -1,17 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { meetingAPI } from '../services/api';
+import { meetingAPI } from '../services/meetingAPI';
 
 const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.mp4', '.mov', '.webm'];
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
-
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+import { formatFileSize } from '../utils/formatFileSize';
 
 function getFileExtension(filename) {
   return '.' + filename.split('.').pop().toLowerCase();

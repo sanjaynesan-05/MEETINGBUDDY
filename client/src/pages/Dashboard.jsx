@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { dashboardAPI } from '../services/dashboardAPI';
+import { useDashboard } from '../hooks/useDashboard';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
 import StatCard from '../components/dashboard/StatCard';
 import RecentMeetings from '../components/dashboard/RecentMeetings';
@@ -9,31 +8,12 @@ import PendingActions from '../components/dashboard/PendingActions';
 import TopKeywords from '../components/dashboard/TopKeywords';
 import LatestSummary from '../components/dashboard/LatestSummary';
 import QuickActions from '../components/dashboard/QuickActions';
-import LoadingSkeleton from '../components/dashboard/LoadingSkeleton';
-import EmptyState from '../components/dashboard/EmptyState';
+import LoadingSkeleton from '../components/common/LoadingSkeleton';
+import EmptyState from '../components/common/EmptyState';
 import { FileAudio, CheckCircle, Clock, BarChart } from 'lucide-react';
 
 export default function Dashboard() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const res = await dashboardAPI.getDashboardData();
-      setData(res.data.data);
-    } catch (err) {
-      console.error('Failed to load dashboard:', err);
-      setError('Failed to load dashboard data. Please try again later.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const { data, loading, error, refetch: fetchDashboardData } = useDashboard();
 
   if (loading) return <LoadingSkeleton />;
 

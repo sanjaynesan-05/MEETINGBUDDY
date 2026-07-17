@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { FileAudio, FileVideo, ExternalLink, Trash2 } from 'lucide-react';
-import { meetingAPI } from '../../services/api';
+import { meetingAPI } from '../../services/meetingAPI';
 
 export default function RecentMeetings({ meetings = [], onUpdate }) {
   

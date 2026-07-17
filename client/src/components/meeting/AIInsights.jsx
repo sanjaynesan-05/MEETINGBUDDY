@@ -1,28 +1,9 @@
-import { useEffect, useState } from "react";
-import { meetingAPI } from "../../services/api";
+import { useAIInsights } from "../../hooks/useAIInsights";
 import DecisionsCard from "./DecisionsCard";
 import KeywordsCard from "./KeywordsCard";
 
 export default function AIInsights({ meetingId }) {
-  const [analysis, setAnalysis] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchAnalysis = async () => {
-      try {
-        const res = await meetingAPI.getAnalysis(meetingId);
-        setAnalysis(res.data.data.analysis);
-      } catch (err) {
-        console.error("Failed to load AI analysis:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (meetingId) {
-      fetchAnalysis();
-    }
-  }, [meetingId]);
+  const { analysis, loading, error } = useAIInsights(meetingId);
 
   if (loading) {
     return (

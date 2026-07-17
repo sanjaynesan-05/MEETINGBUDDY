@@ -1,84 +1,26 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { meetingAPI } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { meetingAPI } from '../services/meetingAPI';
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import ErrorState from '../components/common/ErrorState';
+import StatusChip from '../components/common/StatusChip';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 import AIInsights from "../components/meeting/AIInsights";
-
-function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatDuration(seconds) {
-  if (!seconds) return '—';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
-  if (mins === 0) return `${secs}s`;
-  return `${mins}m ${secs}s`;
-}
+import { formatDate } from '../utils/formatDate';
+import { formatDuration } from '../utils/formatDuration';
+import { useTranscript } from '../hooks/useTranscript';
 
 export default function MeetingTranscript() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const pollRef = useRef(null);
 
-  const [meeting, setMeeting] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { meeting, loading, error } = useTranscript(id);
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Fetch meeting data
-  const fetchMeeting = useCallback(async () => {
-    try {
-      const res = await meetingAPI.getById(id);
-      setMeeting(res.data.meeting);
-      setError('');
-      return res.data.meeting;
-    } catch (err) {
-      const message =
-        err.response?.data?.message || 'Failed to load meeting.';
-      setError(message);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      const m = await fetchMeeting();
-      if (m && (m.status === 'completed' || m.status === 'failed')) {
-        stopPolling();
-      }
-    }, 3000);
-  }, [fetchMeeting, stopPolling]);
-
-  // Initial fetch + polling for transcription status
-  useEffect(() => {
-    fetchMeeting().then((m) => {
-      if (m && (m.status === 'transcribing' || m.status === 'uploaded')) {
-        startPolling();
-      }
-    });
-
-    return () => stopPolling();
-  }, [fetchMeeting, startPolling, stopPolling]);
 
   // Copy transcript to clipboard
   const handleCopy = async () => {
@@ -128,7 +70,7 @@ export default function MeetingTranscript() {
   };
 
   // Highlight search matches in transcript
-  const renderTranscript = () => {
+  const renderTranscript = useMemo(() => {
     if (!meeting?.transcript) return null;
 
     if (!searchQuery.trim()) {
@@ -146,32 +88,23 @@ export default function MeetingTranscript() {
         part
       )
     );
-  };
+  }, [meeting?.transcript, searchQuery]);
 
   // Count search matches
-  const matchCount = searchQuery.trim() && meeting?.transcript
-    ? (meeting.transcript.match(
-        new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
-      ) || []).length
-    : 0;
+  const matchCount = useMemo(() => {
+    if (!searchQuery.trim() || !meeting?.transcript) return 0;
+    const matches = meeting.transcript.match(
+      new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    );
+    return matches ? matches.length : 0;
+  }, [meeting?.transcript, searchQuery]);
 
   if (loading) return <LoadingSpinner fullPage />;
 
   if (error && !meeting) {
     return (
       <div className="page-content">
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="var(--md-error)">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-            </svg>
-          </div>
-          <h2>Meeting Not Found</h2>
-          <p>{error}</p>
-          <button className="btn btn-primary" onClick={() => navigate('/meetings')}>
-            Back to Meetings
-          </button>
-        </div>
+        <ErrorState title="Meeting Not Found" message={error} actionLink="/meetings" actionText="Back to Meetings" />
       </div>
     );
   }
@@ -206,12 +139,7 @@ export default function MeetingTranscript() {
             </p>
           )}
         </div>
-        <span className={`status-badge ${meeting.status}`}>
-          {meeting.status === 'transcribing' && (
-            <span className="spinner spinner-sm" style={{ width: '14px', height: '14px', borderWidth: '2px', borderTopColor: 'currentColor', borderColor: 'rgba(0,0,0,0.15)' }} />
-          )}
-          {meeting.status.charAt(0).toUpperCase() + meeting.status.slice(1)}
-        </span>
+        <StatusChip status={meeting.status} />
       </div>
 
       {/* Metadata Row */}
@@ -220,7 +148,7 @@ export default function MeetingTranscript() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
           </svg>
-          {formatDate(meeting.createdAt)}
+          {formatDate(meeting.createdAt, { relative: false, includeTime: true })}
         </span>
         <span className="meta-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -343,7 +271,7 @@ export default function MeetingTranscript() {
 
           {/* Transcript Text */}
           <div className="transcript-container" id="transcript-content">
-            {renderTranscript()}
+            {renderTranscript}
           </div>
         </>
       )}
@@ -362,41 +290,21 @@ export default function MeetingTranscript() {
         </button>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="dialog-overlay" onClick={() => setShowDeleteDialog(false)}>
-          <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Delete Meeting?</h3>
-            <p>
-              This will permanently delete <strong>{meeting.title}</strong> and its transcript.
-              This action cannot be undone.
-            </p>
-            <div className="dialog-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowDeleteDialog(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? (
-                  <>
-                    <span className="spinner spinner-sm" style={{ borderTopColor: 'white', borderColor: 'rgba(255,255,255,0.3)' }} />
-                    Deleting...
-                  </>
-                ) : (
-                  'Delete'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog 
+        isOpen={showDeleteDialog}
+        title="Delete Meeting?"
+        message={
+          <>
+            This will permanently delete <strong>{meeting.title}</strong> and its transcript.
+            This action cannot be undone.
+          </>
+        }
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+        confirmText="Delete"
+        isDestructive={true}
+        loading={deleting}
+      />
     </div>
   );
 }
