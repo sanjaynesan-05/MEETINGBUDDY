@@ -3,6 +3,7 @@ const fs = require('fs');
 const Meeting = require('../models/Meeting');
 const { getFileType } = require('../middleware/upload');
 const { transcribeFile } = require('../services/transcriptionService');
+const meetingProcessor = require('../services/ai/processors/meeting.processor');
 
 // @desc    Upload a meeting recording and begin transcription
 // @route   POST /api/meetings/upload
@@ -81,6 +82,9 @@ const uploadMeeting = async (req, res) => {
 
 // Async transcription processor (runs in background after response is sent)
 const processTranscription = async (meetingId, filePath) => {
+  const totalStartTime = Date.now();
+  let result;
+
   try {
     // Update status to transcribing
     await Meeting.findByIdAndUpdate(meetingId, {
@@ -92,7 +96,7 @@ const processTranscription = async (meetingId, filePath) => {
 
     // Call Whisper
     let lastProgressTime = 0;
-    const result = await transcribeFile(filePath, {}, async (progress) => {
+    result = await transcribeFile(filePath, {}, async (progress) => {
       // Throttle DB updates to once every 2 seconds to avoid slamming MongoDB
       const now = Date.now();
       if (now - lastProgressTime > 2000 || progress === 100) {
@@ -101,18 +105,6 @@ const processTranscription = async (meetingId, filePath) => {
           transcriptionProgress: progress
         }).catch(err => console.error('Failed to update progress in DB:', err));
       }
-    });
-
-    // Update meeting with transcript
-    await Meeting.findByIdAndUpdate(meetingId, {
-      transcript: result.text,
-      language: result.language,
-      duration: result.duration,
-      wordCount: result.wordCount,
-      status: 'completed',
-      transcriptionStatus: 'completed',
-      transcriptionCompletedAt: new Date(),
-      transcriptionError: '',
     });
 
     console.log(`✅ Transcription completed for meeting: ${meetingId}`);
@@ -125,6 +117,48 @@ const processTranscription = async (meetingId, filePath) => {
       transcriptionStatus: 'failed',
       transcriptionError: error.message,
     });
+    return; // Stop execution on Whisper failure
+  }
+
+  // AI Processing Phase
+  let aiAnalysis = {}; // Default empty object if AI fails
+  try {
+    console.log(`🤖 Starting AI analysis for meeting: ${meetingId}`);
+
+    // Use meetingProcessor.analyze instead of .process as verified in meeting.processor.js
+    aiAnalysis = await meetingProcessor.analyze(result.text);
+
+    console.log(`✅ AI completed for meeting: ${meetingId}`);
+  } catch (error) {
+    console.error(`❌ AI failed for meeting ${meetingId}:`, error.message);
+    // Continue execution to save transcript despite AI failure
+  }
+
+  // Save Results Phase
+  try {
+    console.log(`💾 Saving transcript for meeting: ${meetingId}`);
+    console.log(`💾 Saving AI analysis for meeting: ${meetingId}`);
+    
+    // Update meeting with transcript and AI analysis
+    await Meeting.findByIdAndUpdate(meetingId, {
+      transcript: result.text,
+      aiAnalysis: aiAnalysis,
+      language: result.language,
+      duration: result.duration,
+      wordCount: result.wordCount,
+      status: 'completed',
+      transcriptionStatus: 'completed',
+      transcriptionCompletedAt: new Date(),
+      transcriptionError: '',
+    });
+
+    console.log(`✅ Meeting completed: ${meetingId}`);
+    
+    const executionTime = Date.now() - totalStartTime;
+    console.log(`⏱️ Execution time: ${executionTime}ms`);
+
+  } catch (error) {
+    console.error(`❌ Failed to save meeting results for ${meetingId}:`, error.message);
   }
 };
 

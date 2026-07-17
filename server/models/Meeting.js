@@ -59,6 +59,102 @@ const meetingSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    aiAnalysis: {
+  overview: {
+    type: String,
+    default: '',
+  },
+  summary: {
+    type: String,
+    default: '',
+  },
+  summaryPoints: {
+    type: [String],
+    default: [],
+  },
+  agenda: {
+    type: [String],
+    default: [],
+  },
+  discussionPoints: {
+    type: [String],
+    default: [],
+  },
+  decisions: {
+    type: [String],
+    default: [],
+  },
+  actionItems: {
+  type: [
+    {
+      task: {
+        type: String,
+        default: '',
+      },
+      owner: {
+        type: String,
+        default: '',
+      },
+      deadline: {
+        type: String,
+        default: '',
+      },
+      priority: {
+        type: String,
+        enum: ['High', 'Medium', 'Low'],
+        default: 'Medium',
+      },
+      status: {
+        type: String,
+        default: 'Pending',
+      },
+    },
+  ],
+  default: [],
+},
+  risks: {
+    type: [String],
+    default: [],
+  },
+  questions: {
+    answered: {
+      type: [String],
+      default: [],
+    },
+    unanswered: {
+      type: [String],
+      default: [],
+    },
+  },
+  keywords: {
+    type: [String],
+    default: [],
+  },
+  people: {
+    type: [String],
+    default: [],
+  },
+  organizations: {
+    type: [String],
+    default: [],
+  },
+  technologies: {
+    type: [String],
+    default: [],
+  },
+  meetingType: {
+    type: String,
+    default: '',
+  },
+  followUpRequired: {
+    type: Boolean,
+    default: false,
+  },
+  followUpReason: {
+    type: String,
+    default: '',
+  },
+},
     transcriptionStatus: {
       type: String,
       enum: ['pending', 'processing', 'completed', 'failed'],
