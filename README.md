@@ -8,7 +8,7 @@
 
 A full-stack, AI-powered web application designed to transform audio and video meeting recordings into actionable insights. The system currently features highly accurate, locally hosted speech-to-text transcription utilizing `faster-whisper`, alongside a polished user interface for uploading, tracking, and interacting with meeting transcripts.
 
-Built as a robust foundation for a comprehensive meeting intelligence platform, future iterations will include LLM-based summarization, sentiment analysis, and retrieval-augmented generation (RAG) capabilities.
+Built as a robust foundation for a comprehensive meeting intelligence platform, it currently features LLM-based summarization and structured insight generation using local Ollama models. Future iterations will include sentiment analysis and retrieval-augmented generation (RAG) capabilities.
 
 ---
 
@@ -19,12 +19,11 @@ Built as a robust foundation for a comprehensive meeting intelligence platform, 
 * **Seamless Media Uploads:** Drag-and-drop interface supporting major audio/video formats (MP3, WAV, M4A, MP4, etc.) up to 100MB.
 * **Privacy-First AI Transcription:** Utilizes `faster-whisper` (CTranslate2, int8 quantization) running entirely on local CPU, ensuring sensitive meeting data never leaves your server.
 * **Real-Time Progress Tracking:** Live transcription progress streamed from Python to the Node.js backend and displayed dynamically on the React frontend.
+* **AI Summarization & Action Items:** Automatic generation of meeting minutes, key takeaways, and action items utilizing a local Ollama integration (e.g. `qwen2.5:7b`).
 * **Interactive Transcript Viewer:** Full-text search with match highlighting, one-click clipboard copying, and `.txt` file downloading.
-* **Robust Error Handling:** Fallback from `faster-whisper` to `openai-whisper`, with automatic FFmpeg dependency resolution.
+* **Robust Error Handling:** Decoupled AI processing ensures transcripts are saved even if LLM analysis fails. Fallback from `faster-whisper` to `openai-whisper` ensures reliable transcription.
 
 ### ⚪ Planned Roadmap
-* **AI Summarization:** Automatic generation of meeting minutes and key takeaways using Large Language Models.
-* **Action Item Extraction:** Identification of tasks, owners, and deadlines from conversational context.
 * **Semantic Search & RAG:** Chat with your meeting history using vector embeddings (ChromaDB/Pinecone).
 * **Sentiment & Emotion Analysis:** Understand the tone and emotional trajectory of discussions.
 * **Analytics Dashboard:** Visualize meeting durations, speaker participation, and organizational trends.
@@ -36,7 +35,7 @@ Built as a robust foundation for a comprehensive meeting intelligence platform, 
 The application utilizes a decoupled, modern three-tier architecture:
 
 <p align="center">
-  <img src="photos/current-architecure.webp" alt="Current Architecture Diagram" width="100%">
+  <img src="photos/current-architecure.png" alt="Current Architecture Diagram" width="100%">
 </p>
 
 ### Technology Stack Detailed
@@ -53,10 +52,11 @@ The application utilizes a decoupled, modern three-tier architecture:
 * **Security:** JSON Web Tokens (jsonwebtoken), bcryptjs, express-validator
 * **File Handling:** Multer (multipart/form-data parsing), uuid
 
-**AI Pipeline (Python)**
+**AI Pipeline (Node.js & Python)**
 * **Transcription Engine:** `faster-whisper` (Primary), `openai-whisper` (Fallback)
-* **Inference Backend:** CTranslate2 (Optimized for CPU via int8 quantization)
+* **Inference Backend (STT):** CTranslate2 (Optimized for CPU via int8 quantization)
 * **Audio Processing:** FFmpeg (Resolved via WinGet/System PATH)
+* **LLM Engine:** Local Ollama (`qwen2.5:7b` via Node.js API)
 
 ---
 
@@ -137,6 +137,9 @@ UPLOAD_DIR=uploads
 # AI Transcription Settings
 WHISPER_MODEL=base      # Options: tiny, base, small, medium, large-v3
 WHISPER_LANGUAGE=en     # Leave blank for auto-detect
+
+# AI LLM Settings
+OLLAMA_MODEL=qwen2.5:7b # Default local LLM for meeting analysis
 
 # FFmpeg Configuration (Absolute path to executable)
 # Note: On Windows, use double backslashes or raw string format if needed

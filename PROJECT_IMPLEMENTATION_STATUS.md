@@ -18,11 +18,11 @@ The AI Meeting Intelligence System is a web application that allows authenticate
 The long-term vision extends far beyond current implementation — the PRD describes a system capable of:
 
 - Speech-to-text transcription *(implemented)*
-- AI-powered meeting summarization *(planned)*
+- AI-powered meeting summarization *(implemented via Ollama)*
 - Speaker diarization *(planned)*
 - Sentiment analysis & emotion recognition *(planned)*
 - Intent recognition *(planned)*
-- Action item extraction with priority scoring *(planned)*
+- Action item extraction with priority scoring *(implemented via Ollama)*
 - Decision & question detection *(planned)*
 - Retrieval-Augmented Generation (RAG) search *(planned)*
 - Semantic search across meeting history *(planned)*
@@ -56,9 +56,11 @@ Progress streamed via stdout → saved to MongoDB
         ↓
 Frontend polls every 3s → shows progress bar
         ↓
-Transcript text saved to MongoDB
+AI Meeting Intelligence Engine runs (Ollama)
         ↓
-User views/searches/copies/downloads transcript
+Transcript & AI Analysis saved to MongoDB
+        ↓
+User views/searches/copies/downloads transcript and AI insights
 ```
 
 ---
@@ -81,7 +83,8 @@ User views/searches/copies/downloads transcript
 | **Validation** | express-validator | 7.3.2 |
 | **Speech-to-Text (primary)** | faster-whisper (Python) | 1.2.1 |
 | **Speech-to-Text (fallback)** | openai-whisper (Python) | installed |
-| **AI Inference Engine** | CTranslate2 | 4.8.1 |
+| **AI Inference Engine (STT)** | CTranslate2 | 4.8.1 |
+| **AI LLM Engine** | Ollama (qwen2.5:7b) | (system) |
 | **Audio Processing** | FFmpeg (via WinGet, Gyan build) | 8.1.2 |
 | **Python** | CPython | 3.11 |
 | **Styling** | Vanilla CSS (Material Design 3 tokens) | — |
@@ -238,12 +241,12 @@ d:\final year project\
 | Transcript Download | Download as .txt | 🟢 Completed | 100% | `MeetingTranscript.jsx` |
 | FFmpeg Detection | Auto-detect from .env, PATH, WinGet | 🟢 Completed | 100% | `transcribe.py` |
 | Health Check | System status + Whisper availability | 🟢 Completed | 100% | `server.js` |
-| AI Summarization | LLM-generated meeting summaries | ⚪ Planned | 0% | *Not implemented* |
+| AI Summarization | LLM-generated meeting summaries | 🟢 Completed | 100% | `ollama.service.js`, `meeting.processor.js` |
 | Speaker Diarization | Identify individual speakers | ⚪ Planned | 0% | *Not implemented* |
 | Sentiment Analysis | Positive/Negative/Neutral detection | ⚪ Planned | 0% | *Not implemented* |
 | Emotion Recognition | Happy, Frustrated, Concerned, etc. | ⚪ Planned | 0% | *Not implemented* |
 | Intent Recognition | Question, Decision, Task, Suggestion | ⚪ Planned | 0% | *Not implemented* |
-| Action Item Extraction | Tasks with owner, deadline, priority | ⚪ Planned | 0% | *Not implemented* |
+| Action Item Extraction | Tasks with owner, deadline, priority | 🟢 Completed | 100% | `ollama.service.js`, `meeting.processor.js` |
 | Decision Detection | Extract decisions from conversations | ⚪ Planned | 0% | *Not implemented* |
 | RAG Search | Vector embeddings + semantic Q&A | ⚪ Planned | 0% | *Not implemented* |
 | Semantic Search | Natural language meeting search | ⚪ Planned | 0% | *Not implemented* |
@@ -332,17 +335,18 @@ d:\final year project\
     - Emits "PROGRESS: XX.X" per segment
     - Outputs final JSON to stdout
         ↓
-11. meetingController saves to MongoDB:
-    - transcript text
-    - language, duration, wordCount
-    - status → "completed"
-    - transcriptionCompletedAt timestamp
+11. meetingController (Decoupled Workflow):
+    - Wait for Whisper to succeed
+    - Start AI Meeting Intelligence (ollama.service.js)
+    - If AI succeeds, save transcript + aiAnalysis to MongoDB
+    - If AI fails, save transcript + empty object to MongoDB
+    - Update status → "completed"
         ↓
 12. Frontend (MeetingTranscript.jsx):
     - Polls GET /api/meetings/:id every 3 seconds
     - Shows progress bar when transcriptionProgress > 0
     - Stops polling when status is "completed" or "failed"
-    - Renders transcript with search/copy/download tools
+    - Renders transcript & AI insights with search/copy/download tools
 ```
 
 > [!IMPORTANT]
@@ -547,6 +551,8 @@ d:\final year project\
 | Service | File | Purpose | Dependencies |
 |---------|------|---------|-------------|
 | `transcriptionService.js` | `services/transcriptionService.js` | Spawns Python process, streams progress, parses JSON output, retry logic | `child_process.spawn`, `child_process.execFile` |
+| `ollama.service.js` | `services/ai/ollama.service.js` | Connects to local Ollama API, provides generic chat and summarization | `ollama` |
+| `meeting.processor.js` | `services/ai/processors/meeting.processor.js` | Parses and validates AI JSON response | `retryHandler`, `meetingSchema` |
 
 ### Service Functions
 
@@ -555,6 +561,7 @@ d:\final year project\
 | `runWhisper(filePath, options, onProgress)` | Spawns Python process, parses PROGRESS lines, returns transcription result |
 | `transcribeFile(filePath, options, onProgress)` | Wrapper with retry logic (3 attempts) |
 | `checkWhisperAvailability()` | Checks if Python + faster-whisper/openai-whisper are installed |
+| `analyze(transcript)` | Uses AI to generate structured insights from the transcript |
 
 ---
 
@@ -636,13 +643,13 @@ d:\final year project\
 | Feature | Status | Implementation Details |
 |---------|--------|----------------------|
 | **Speech-to-Text** | 🟢 Completed | faster-whisper (CTranslate2, int8, CPU) with openai-whisper fallback |
-| **Summarization** | ⚪ Planned | No LLM integration, no summary fields in schema, no API endpoints |
+| **Summarization** | 🟢 Completed | Local LLM via Ollama (`qwen2.5:7b`). Decoupled from Whisper. |
 | **Embeddings** | ⚪ Planned | No embedding generation code, no vector database |
 | **RAG** | ⚪ Planned | No retrieval pipeline, no vector store |
 | **Sentiment Analysis** | ⚪ Planned | No sentiment model, no analysis code |
 | **Emotion Recognition** | ⚪ Planned | No emotion model or classification |
 | **Intent Recognition** | ⚪ Planned | No intent classifier |
-| **Action Item Extraction** | ⚪ Planned | No extraction logic, no task model |
+| **Action Item Extraction** | 🟢 Completed | Extracted via structured AI JSON prompt in MeetingProcessor |
 | **Decision Detection** | ⚪ Planned | No detection logic |
 | **Question Detection** | ⚪ Planned | No detection logic |
 | **Speaker Diarization** | ⚪ Planned | No diarization model (e.g., pyannote) |
@@ -675,9 +682,10 @@ flowchart TD
     P --> Q[Progress bar updates]
     K --> R[Final JSON output]
     L --> R
-    R --> S[Save transcript to MongoDB]
-    S --> T[Status → completed]
-    T --> U[Frontend shows transcript]
+    R --> S[AI Analysis via Ollama]
+    S --> T[Save Transcript & AI Data to MongoDB]
+    T --> U[Status → completed]
+    U --> V[Frontend shows transcript & insights]
 ```
 
 ---
@@ -697,6 +705,7 @@ flowchart TD
 | `cors` | 2.8.6 | Cross-origin resource sharing |
 | `dotenv` | 17.4.2 | Environment variable loading |
 | `uuid` | 14.0.1 | UUID generation for filenames |
+| `ollama` | (installed) | Local LLM integration client |
 
 ### Client (`client/package.json`)
 
@@ -742,6 +751,7 @@ flowchart TD
 | `WHISPER_MODEL` | `.env` | Whisper model size | `base` |
 | `WHISPER_LANGUAGE` | `.env` | Default transcription language | `en` |
 | `FFMPEG_PATH` | `.env` | Absolute path to ffmpeg.exe | *(full WinGet path)* |
+| `OLLAMA_MODEL` | `.env` | Model for meeting analysis | `qwen2.5:7b` |
 
 ---
 
@@ -749,19 +759,20 @@ flowchart TD
 
 ```
 Frontend UI           ████████████████████░░░░   80%
-Backend API           ████████████████████░░░░   80%
-Database Schema       ████████████████░░░░░░░░   65%
+Backend API           ██████████████████████░░   90%
+Database Schema       ████████████████████░░░░   80%
 Authentication        █████████████████████████  100%
 File Upload           █████████████████████████  100%
 Transcription (STT)   █████████████████████████  100%
-Summarization (AI)    ░░░░░░░░░░░░░░░░░░░░░░░░    0%
+Summarization (AI)    █████████████████████████  100%
+Action Items (AI)     █████████████████████████  100%
 Sentiment/Emotion     ░░░░░░░░░░░░░░░░░░░░░░░░    0%
 RAG / Search          ░░░░░░░░░░░░░░░░░░░░░░░░    0%
 Analytics Dashboard   ░░░░░░░░░░░░░░░░░░░░░░░░    0%
 Testing               ░░░░░░░░░░░░░░░░░░░░░░░░    0%
 Deployment            ░░░░░░░░░░░░░░░░░░░░░░░░    0%
 ─────────────────────────────────────────────────
-OVERALL                                          ~30%
+OVERALL                                          ~45%
 ```
 
 ---
