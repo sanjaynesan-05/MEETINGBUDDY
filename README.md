@@ -102,7 +102,7 @@ Ensure you have the following installed on your host machine:
 ### 1. Repository Setup
 
 ```bash
-git clone https://github.com/your-username/meeting-intelligence.git
+git clone https://github.com/sanjaynesan-05/MEETINGBUDDY.git
 cd meeting-intelligence
 ```
 

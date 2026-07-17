@@ -32,13 +32,6 @@
 
 ---
 
-### 🔑 Test Login Credentials
-
-During the automated end-to-end testing, the agent registered a test account in your local database. You can use these credentials to log in and explore the dashboard right now:
-
-*   **Email:** `[EMAIL_ADDRESS]`
-*   **Password:** `Password123!`
-
 *(Note: The frontend is currently running on `http://localhost:5173` and the backend is running on port `5000` in the background).*
 
 Everything planned for the Week 1 architecture and authentication flow is complete, visually polished, and fully functional!
