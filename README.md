@@ -8,7 +8,7 @@
 
 A full-stack, AI-powered web application designed to transform audio and video meeting recordings into actionable insights. The system currently features highly accurate, locally hosted speech-to-text transcription utilizing `faster-whisper`, alongside a polished user interface for uploading, tracking, and interacting with meeting transcripts.
 
-Built as a robust foundation for a comprehensive meeting intelligence platform, it currently features LLM-based summarization and structured insight generation using local Ollama models. Future iterations will include sentiment analysis and retrieval-augmented generation (RAG) capabilities.
+Built as a robust foundation for a comprehensive meeting intelligence platform, it currently features LLM-based summarization, structured insight generation, and a fully functional stateful Retrieval-Augmented Generation (RAG) chat engine using local Ollama models and Qdrant.
 
 ---
 
@@ -21,10 +21,10 @@ Built as a robust foundation for a comprehensive meeting intelligence platform, 
 * **Real-Time Progress Tracking:** Live transcription progress streamed from Python to the Node.js backend and displayed dynamically on the React frontend.
 * **AI Summarization & Action Items:** Automatic generation of meeting minutes, key takeaways, and action items utilizing a local Ollama integration (e.g. `qwen2.5:7b`).
 * **Interactive Transcript Viewer:** Full-text search with match highlighting, one-click clipboard copying, and `.txt` file downloading.
+* **Enterprise RAG Chat Engine:** Chat with your meeting history using a locally hosted vector database (Qdrant). Features include dynamic prompt orchestration, response citations, confidence scoring, and conversational memory across the session.
 * **Robust Error Handling:** Decoupled AI processing ensures transcripts are saved even if LLM analysis fails. Fallback from `faster-whisper` to `openai-whisper` ensures reliable transcription.
 
 ### ⚪ Planned Roadmap
-* **Semantic Search & RAG:** Chat with your meeting history using vector embeddings (ChromaDB/Pinecone).
 * **Sentiment & Emotion Analysis:** Understand the tone and emotional trajectory of discussions.
 * **Analytics Dashboard:** Visualize meeting durations, speaker participation, and organizational trends.
 
@@ -57,6 +57,8 @@ The application utilizes a decoupled, modern three-tier architecture:
 * **Inference Backend (STT):** CTranslate2 (Optimized for CPU via int8 quantization)
 * **Audio Processing:** FFmpeg (Resolved via WinGet/System PATH)
 * **LLM Engine:** Local Ollama (`qwen2.5:7b` via Node.js API)
+* **Vector Database:** Qdrant (for RAG embeddings and semantic search)
+* **Embedding Model:** `nomic-embed-text` (via Ollama)
 
 ---
 
