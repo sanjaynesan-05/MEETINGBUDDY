@@ -1,6 +1,20 @@
-import apiClient from './apiClient';
+import axios from 'axios';
 
-export const chatAPI = {
-  /** Stub for future RAG chat endpoints */
-  sendMessage: (data) => apiClient.post('/chat/message', data),
+const api = axios.create({
+  baseURL: '/api' // Proxied via Vite
+});
+
+export const sendChatMessage = async (question, filters = {}) => {
+  try {
+    const response = await api.post('/ai/chat', {
+      question,
+      filters
+    });
+    return response.data;
+  } catch (error) {
+    if (error.response && error.response.data && error.response.data.error) {
+      throw new Error(error.response.data.error);
+    }
+    throw new Error('Failed to communicate with AI Gateway');
+  }
 };

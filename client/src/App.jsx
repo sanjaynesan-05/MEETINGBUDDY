@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard';
 import Meetings from './pages/Meetings';
 import MeetingUpload from './pages/MeetingUpload';
 import MeetingTranscript from './pages/MeetingTranscript';
+import AIChatPage from './pages/AIChatPage';
 
 // Layout for authenticated pages (with Navbar + Sidebar)
 function AppLayout() {
@@ -31,6 +32,7 @@ function AppLayout() {
           <Route path="/meetings" element={<Meetings />} />
           <Route path="/meetings/upload" element={<MeetingUpload />} />
           <Route path="/meetings/:id" element={<MeetingTranscript />} />
+          <Route path="/chat" element={<AIChatPage />} />
           {/* Future routes for Week 3+ */}
           <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
           <Route path="/analytics" element={<ComingSoon title="Analytics" />} />
