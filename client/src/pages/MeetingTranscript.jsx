@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { meetingAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import AIInsights from "../components/meeting/AIInsights";
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -177,6 +178,7 @@ export default function MeetingTranscript() {
 
   return (
     <div className="page-content">
+      <AIInsights meetingId={id} />
       {/* Breadcrumb */}
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <Link to="/meetings" style={{ fontSize: 'var(--text-base)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>

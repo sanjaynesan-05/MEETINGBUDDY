@@ -6,6 +6,7 @@ const {
   getAllMeetings,
   getMeeting,
   getTranscript,
+  getAnalysis,
   deleteMeeting,
 } = require('../controllers/meetingController');
 
@@ -34,6 +35,11 @@ router.get('/:id', getMeeting);
 // @route   GET /api/meetings/:id/transcript
 // @desc    Get transcript for a meeting
 router.get('/:id/transcript', getTranscript);
+
+// @route   GET /api/meetings/:id/analysis
+// @desc    Get AI analysis for a meeting
+// @access  Private
+router.get('/:id/analysis', getAnalysis);
 
 // @route   DELETE /api/meetings/:id
 // @desc    Delete a meeting

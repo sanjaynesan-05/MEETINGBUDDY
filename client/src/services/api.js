@@ -78,6 +78,9 @@ export const meetingAPI = {
   /** Get transcript data for a meeting */
   getTranscript: (id) => api.get(`/meetings/${id}/transcript`),
 
+  /** Get AI analysis for a meeting */
+  getAnalysis: (id) => api.get(`/meetings/${id}/analysis`),
+
   /** Delete a meeting */
   delete: (id) => api.delete(`/meetings/${id}`),
 };

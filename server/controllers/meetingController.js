@@ -273,6 +273,53 @@ const getTranscript = async (req, res) => {
   }
 };
 
+// @desc    Get AI analysis for a meeting
+// @route   GET /api/meetings/:id/analysis
+// @access  Private
+const getAnalysis = async (req, res) => {
+  try {
+    const meeting = await Meeting.findOne({
+      _id: req.params.id,
+      uploadedBy: req.user._id,
+    }).select(
+      'title status aiAnalysis transcriptionStatus transcriptionCompletedAt'
+    );
+
+    if (!meeting) {
+      return res.status(404).json({
+        success: false,
+        message: 'Meeting not found.',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        meetingId: meeting._id,
+        title: meeting.title,
+        status: meeting.status,
+        transcriptionStatus: meeting.transcriptionStatus,
+        transcriptionCompletedAt: meeting.transcriptionCompletedAt,
+        analysis: meeting.aiAnalysis,
+      },
+    });
+  } catch (error) {
+    console.error('Get analysis error:', error);
+
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid meeting ID format.',
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve AI analysis.',
+    });
+  }
+};
+
 // @desc    Delete a meeting and its uploaded file
 // @route   DELETE /api/meetings/:id
 // @access  Private
@@ -325,5 +372,6 @@ module.exports = {
   getAllMeetings,
   getMeeting,
   getTranscript,
+  getAnalysis,
   deleteMeeting,
 };
