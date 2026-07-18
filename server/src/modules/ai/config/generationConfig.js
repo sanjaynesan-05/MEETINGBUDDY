@@ -1,8 +1,8 @@
 require('dotenv').config();
 
 module.exports = {
-  OLLAMA_URL: process.env.OLLAMA_URL || 'http://localhost:11434',
-  OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'llama3.1',
+  OLLAMA_URL: process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+  OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'llama3.1:8b',
   REQUEST_TIMEOUT: parseInt(process.env.GENERATION_REQUEST_TIMEOUT, 10) || 60000,
   MAX_RESPONSE_TOKENS: parseInt(process.env.MAX_RESPONSE_TOKENS, 10) || 1024,
   TEMPERATURE: parseFloat(process.env.GENERATION_TEMPERATURE) || 0.3,

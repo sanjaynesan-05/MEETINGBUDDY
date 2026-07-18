@@ -2,12 +2,35 @@ const { default: ollama } = require("ollama");
 
 class OllamaService {
     constructor() {
-        this.model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+        this.model = process.env.OLLAMA_MODEL || "llama3.1:8b";
+        this.baseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 
         this.defaultOptions = {
             temperature: 0,
             num_ctx: 16384,
         };
+    }
+
+    async checkModelAvailability() {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/tags`);
+            if (!response.ok) {
+                throw new Error("Ollama server is not responding correctly.");
+            }
+            const data = await response.json();
+            const models = data.models || [];
+            const modelExists = models.some((m) => m.name === this.model || m.name === `${this.model}:latest`);
+            
+            if (!modelExists) {
+                const installedModels = models.map(m => m.name).join(", ");
+                throw new Error(`\nConfigured model:\n${this.model}\n\nInstalled models:\n${installedModels || "None"}\n\nSuggested fix:\nollama pull ${this.model}`);
+            }
+        } catch (error) {
+            if (error.cause && error.cause.code === 'ECONNREFUSED' || (error.message && error.message.includes('fetch failed'))) {
+                throw new Error("Ollama server is unreachable. Is Ollama running?");
+            }
+            throw error;
+        }
     }
 
     /**
@@ -17,6 +40,7 @@ class OllamaService {
      * @returns {Promise<string>}
      */
     async chat(prompt, options = {}) {
+        await this.checkModelAvailability();
         try {
             const response = await ollama.chat({
                 model: this.model,

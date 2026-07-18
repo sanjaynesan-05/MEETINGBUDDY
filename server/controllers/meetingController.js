@@ -46,6 +46,7 @@ const uploadMeeting = async (req, res) => {
       uploadedBy: req.user._id,
     });
 
+    console.log(`Audio uploaded`);
     // Return immediately — transcription happens asynchronously
     res.status(201).json({
       success: true,
@@ -92,7 +93,7 @@ const processTranscription = async (meetingId, filePath) => {
       transcriptionStatus: 'processing',
     });
 
-    console.log(`🎙️ Starting transcription for meeting: ${meetingId}`);
+    console.log(`Starting WhisperX...`);
 
     // Call Whisper
     let lastProgressTime = 0;
@@ -107,7 +108,7 @@ const processTranscription = async (meetingId, filePath) => {
       }
     });
 
-    console.log(`✅ Transcription completed for meeting: ${meetingId}`);
+    console.log(`Transcription complete`);
 
   } catch (error) {
     console.error(`❌ Transcription failed for meeting ${meetingId}:`, error.message);
@@ -123,12 +124,12 @@ const processTranscription = async (meetingId, filePath) => {
   // AI Processing Phase
   let aiAnalysis = {}; // Default empty object if AI fails
   try {
-    console.log(`🤖 Starting AI analysis for meeting: ${meetingId}`);
+    console.log(`Calling Ollama (${process.env.OLLAMA_MODEL || 'llama3.1:8b'})`);
 
     // Use meetingProcessor.analyze instead of .process as verified in meeting.processor.js
     aiAnalysis = await meetingProcessor.analyze(result.text);
 
-    console.log(`✅ AI completed for meeting: ${meetingId}`);
+    console.log(`AI analysis complete`);
   } catch (error) {
     console.error(`❌ AI failed for meeting ${meetingId}:`, error.message);
     // Continue execution to save transcript despite AI failure
@@ -136,8 +137,10 @@ const processTranscription = async (meetingId, filePath) => {
 
   // Save Results Phase
   try {
-    console.log(`💾 Saving transcript for meeting: ${meetingId}`);
-    console.log(`💾 Saving AI analysis for meeting: ${meetingId}`);
+    console.log(`Saving transcript`);
+    console.log(`Formatting transcript`);
+    let formattedSegments = [];
+    let plainTextTranscript = result.text;
     
     // Update meeting with transcript and AI analysis
     await Meeting.findByIdAndUpdate(meetingId, {
@@ -152,7 +155,7 @@ const processTranscription = async (meetingId, filePath) => {
       transcriptionError: '',
     });
 
-    console.log(`✅ Meeting completed: ${meetingId}`);
+    console.log(`Meeting completed`);
     
     const executionTime = Date.now() - totalStartTime;
     console.log(`⏱️ Execution time: ${executionTime}ms`);

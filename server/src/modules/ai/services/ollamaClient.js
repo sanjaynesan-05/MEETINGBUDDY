@@ -3,6 +3,31 @@ const config = require('../config/generationConfig');
 const callOllama = async (prompt) => {
   console.log('Loading model...');
   console.log('Generating answer...');
+
+  // Check model availability first
+  try {
+    const tagsResponse = await fetch(`${config.OLLAMA_URL}/api/tags`);
+    if (tagsResponse.ok) {
+      const data = await tagsResponse.json();
+      const models = data.models || [];
+      const modelExists = models.some((m) => m.name === config.OLLAMA_MODEL || m.name === `${config.OLLAMA_MODEL}:latest`);
+      
+      if (!modelExists) {
+        const installedModels = models.map(m => m.name).join(", ");
+        throw new Error(`\nConfigured model:\n${config.OLLAMA_MODEL}\n\nInstalled models:\n${installedModels || "None"}\n\nSuggested fix:\nollama pull ${config.OLLAMA_MODEL}`);
+      }
+    }
+  } catch (error) {
+    if (error.message.includes('Configured model')) {
+      throw error;
+    }
+    // If it's a fetch error, it might be unreachable
+    if (error.cause && error.cause.code === 'ECONNREFUSED' || (error.message && error.message.includes('fetch failed'))) {
+      throw new Error("Ollama server is unreachable. Is Ollama running?");
+    }
+    // Otherwise just log and continue, let the main fetch catch it
+    console.warn("Could not verify model availability:", error.message);
+  }
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), config.REQUEST_TIMEOUT);

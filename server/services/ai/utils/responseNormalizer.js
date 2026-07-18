@@ -9,8 +9,20 @@ class ResponseNormalizer {
         };
 
         const cleanArray = (arr) => {
-            return Array.isArray(arr) ? arr : [];
+            return Array.isArray(arr) ? arr.map(cleanString).filter(Boolean) : [];
         };
+
+        const deduplicate = (arr) => {
+            return [...new Set(arr.map(s => s.toLowerCase()))].map(lower => {
+                return arr.find(s => s.toLowerCase() === lower);
+            });
+        };
+
+        const sortArray = (arr) => {
+            return [...arr].sort((a, b) => a.localeCompare(b));
+        };
+
+        const processList = (arr) => sortArray(deduplicate(cleanArray(arr)));
 
         const normalizePriority = (prio) => {
             if (!prio) return "Medium";
@@ -24,29 +36,33 @@ class ResponseNormalizer {
             return cleanString(deadline);
         };
 
+        // Filter out empty action items
+        const rawActionItems = Array.isArray(data.actionItems) ? data.actionItems : [];
+        const actionItems = rawActionItems.map(item => ({
+            task: cleanString(item.task),
+            owner: cleanString(item.owner),
+            deadline: normalizeDeadline(item.deadline),
+            priority: normalizePriority(item.priority),
+            status: item.status ? cleanString(item.status) : "Pending"
+        })).filter(item => item.task !== "");
+
         return {
             overview: cleanString(data.overview),
             summary: cleanString(data.summary),
             summaryPoints: cleanArray(data.summaryPoints),
-            agenda: cleanArray(data.agenda),
-            discussionPoints: cleanArray(data.discussionPoints),
+            agenda: processList(data.agenda),
+            discussionPoints: processList(data.discussionPoints),
             decisions: cleanArray(data.decisions),
-            actionItems: cleanArray(data.actionItems).map(item => ({
-                task: cleanString(item.task),
-                owner: cleanString(item.owner),
-                deadline: normalizeDeadline(item.deadline),
-                priority: normalizePriority(item.priority),
-                status: item.status ? cleanString(item.status) : "Pending"
-            })),
+            actionItems,
             risks: cleanArray(data.risks),
             questions: {
                 answered: cleanArray(data?.questions?.answered),
                 unanswered: cleanArray(data?.questions?.unanswered)
             },
-            keywords: cleanArray(data.keywords),
-            people: cleanArray(data.people),
-            organizations: cleanArray(data.organizations),
-            technologies: cleanArray(data.technologies),
+            keywords: processList(data.keywords),
+            people: processList(data.people),
+            organizations: processList(data.organizations),
+            technologies: processList(data.technologies),
             meetingType: cleanString(data.meetingType),
             followUpRequired: Boolean(data.followUpRequired),
             followUpReason: cleanString(data.followUpReason)
