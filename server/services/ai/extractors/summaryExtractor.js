@@ -1,7 +1,7 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
 
-const PROMPT = \
+const PROMPT = `
 You are an AI meeting assistant. Extract the overview, summary, and summary points from the transcript.
 Return ONLY valid JSON. Do not hallucinate.
 
@@ -13,7 +13,7 @@ Return ONLY valid JSON. Do not hallucinate.
 
 Transcript:
 {{TRANSCRIPT}}
-\;
+`;
 
 class SummaryExtractor {
     async extract(transcript) {

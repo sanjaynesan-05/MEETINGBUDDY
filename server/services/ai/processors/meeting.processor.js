@@ -16,6 +16,13 @@ class MeetingProcessor {
         console.log("Starting Modular Meeting Processor pipeline...");
         const startTime = Date.now();
 
+        // Truncate to save context window and avoid OOM
+        const maxChars = parseInt(process.env.MAX_CONTEXT_CHARACTERS || process.env.MAX_CONTEXT || "24000", 10);
+        const processingTranscript = transcript.length > maxChars 
+            ? transcript.substring(0, maxChars) + "\n...[TRUNCATED]" 
+            : transcript;
+        console.log(`Transcript length: ${transcript.length} chars. Processing: ${processingTranscript.length} chars.`);
+
         // Default empty structure
         let finalJson = {
             overview: "", summary: "", summaryPoints: [], agenda: [], discussionPoints: [],
@@ -24,16 +31,19 @@ class MeetingProcessor {
         };
 
         const runStage = async (name, extractor, validateFn, mergeFn) => {
+            const stageStart = Date.now();
             try {
                 const result = await retryHandler.withRetry(async () => {
-                    const data = await extractor.extract(transcript);
+                    const data = await extractor.extract(processingTranscript);
                     validateFn(data);
                     return data;
-                }, 3, 2000);
+                }, null, 2000); // maxAttempts = null (uses .env)
                 mergeFn(result);
-                console.log(`${name} ✓`);
+                const duration = Date.now() - stageStart;
+                console.log(`${name} ✓ (${duration}ms)`);
             } catch (error) {
-                console.error(`❌ Failed to extract ${name}:`, error.message);
+                const duration = Date.now() - stageStart;
+                console.error(`❌ Failed to extract ${name} after ${duration}ms:`, error.message);
                 // Fallback will use the default values initialized in finalJson
             }
         };

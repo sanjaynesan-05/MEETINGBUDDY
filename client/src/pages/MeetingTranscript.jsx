@@ -111,7 +111,7 @@ export default function MeetingTranscript() {
 
   return (
     <div className="page-content">
-      <AIInsights meetingId={id} />
+      <AIInsights meetingId={id} meetingStatus={meeting?.status} />
       {/* Breadcrumb */}
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <Link to="/meetings" style={{ fontSize: 'var(--text-base)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>

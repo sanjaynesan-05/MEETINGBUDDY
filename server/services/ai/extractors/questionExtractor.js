@@ -1,7 +1,7 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
 
-const PROMPT = \
+const PROMPT = `
 You are an AI meeting assistant. Extract all questions asked during the meeting.
 Categorize them as "answered" if an answer was provided, or "unanswered" if no clear answer was given.
 Return ONLY valid JSON. Do not hallucinate.
@@ -15,7 +15,7 @@ Return ONLY valid JSON. Do not hallucinate.
 
 Transcript:
 {{TRANSCRIPT}}
-\;
+`;
 
 class QuestionExtractor {
     async extract(transcript) {

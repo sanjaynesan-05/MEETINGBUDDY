@@ -1,7 +1,7 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
 
-const PROMPT = \
+const PROMPT = `
 You are an AI meeting assistant. Extract any risks, blockers, or concerns explicitly discussed in the transcript.
 Only extract risks actually discussed. Never use generic examples.
 Return ONLY valid JSON. Do not hallucinate.
@@ -12,7 +12,7 @@ Return ONLY valid JSON. Do not hallucinate.
 
 Transcript:
 {{TRANSCRIPT}}
-\;
+`;
 
 class RiskExtractor {
     async extract(transcript) {

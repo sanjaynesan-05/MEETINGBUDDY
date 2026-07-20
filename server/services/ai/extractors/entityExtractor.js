@@ -1,7 +1,7 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
 
-const PROMPT = \
+const PROMPT = `
 You are an AI meeting assistant. Extract people, organizations, technologies, and keywords from the transcript.
 - people: Full names of participants or people mentioned.
 - organizations: Companies, vendors, partners, or departments mentioned.
@@ -18,7 +18,7 @@ Return ONLY valid JSON. Do not hallucinate.
 
 Transcript:
 {{TRANSCRIPT}}
-\;
+`;
 
 class EntityExtractor {
     async extract(transcript) {

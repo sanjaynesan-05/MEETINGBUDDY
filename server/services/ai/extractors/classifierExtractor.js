@@ -1,7 +1,7 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
 
-const PROMPT = \
+const PROMPT = `
 You are an AI meeting assistant. Classify the meeting type and determine if a follow-up is required.
 Meeting types can be: Sprint Planning, Engineering Staff Meeting, Leadership Meeting, Project Review, Incident Review, Architecture Review, etc.
 Return ONLY valid JSON. Do not hallucinate.
@@ -14,7 +14,7 @@ Return ONLY valid JSON. Do not hallucinate.
 
 Transcript:
 {{TRANSCRIPT}}
-\;
+`;
 
 class ClassifierExtractor {
     async extract(transcript) {

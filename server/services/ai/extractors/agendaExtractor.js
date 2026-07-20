@@ -1,7 +1,7 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
 
-const PROMPT = \
+const PROMPT = `
 You are an AI meeting assistant. Extract the agenda items and major discussion points from the transcript.
 Be specific and comprehensive. Do not use generic terms like "Team Updates".
 Return ONLY valid JSON. Do not hallucinate.
@@ -13,7 +13,7 @@ Return ONLY valid JSON. Do not hallucinate.
 
 Transcript:
 {{TRANSCRIPT}}
-\;
+`;
 
 class AgendaExtractor {
     async extract(transcript) {

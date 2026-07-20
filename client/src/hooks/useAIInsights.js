@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { meetingAPI } from '../services/meetingAPI';
 
-export function useAIInsights(meetingId) {
+export function useAIInsights(meetingId, meetingStatus) {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,8 +22,11 @@ export function useAIInsights(meetingId) {
   }, [meetingId]);
 
   useEffect(() => {
-    fetchAnalysis();
-  }, [fetchAnalysis]);
+    // Fetch if status is completed, or if status isn't provided (fallback)
+    if (!meetingStatus || meetingStatus === 'completed') {
+      fetchAnalysis();
+    }
+  }, [fetchAnalysis, meetingStatus]);
 
   return { analysis, loading, error, refetch: fetchAnalysis };
 }

@@ -4,8 +4,8 @@ import DecisionsCard from "./DecisionsCard";
 import KeywordsCard from "./KeywordsCard";
 import MeetingFilterBar from "./MeetingFilterBar";
 
-export default function AIInsights({ meetingId }) {
-  const { analysis, loading, error } = useAIInsights(meetingId);
+export default function AIInsights({ meetingId, meetingStatus }) {
+  const { analysis, loading, error } = useAIInsights(meetingId, meetingStatus);
   const [activeFilter, setActiveFilter] = useState("All");
 
   if (loading) {
