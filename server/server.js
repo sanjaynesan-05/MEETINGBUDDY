@@ -30,6 +30,7 @@ app.use('/api/meetings', require('./routes/meetings'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/ai', require('./src/modules/ai/routes/ai.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes.js'));
+app.use('/api/search', require('./routes/search.routes.js'));
 
 // Health check
 app.get('/api/health', async (req, res) => {
