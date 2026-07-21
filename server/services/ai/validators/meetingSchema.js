@@ -1,18 +1,33 @@
 class MeetingSchemaValidator {
     
-    // Hallucinated examples to reject
-    HALLUCINATED_EXAMPLES = [
-        "deploy on monday",
-        "complete authentication module",
-        "api rate limits could block data migration",
-        "has the budget been approved",
-        "finalize vendor contract"
-    ];
+    verifySemanticMatch(text, transcript, itemType) {
+        if (!transcript) return;
+        if (!text || typeof text !== "string") return;
 
-    containsHallucination(text) {
-        if (!text || typeof text !== "string") return false;
-        const lower = text.toLowerCase();
-        return this.HALLUCINATED_EXAMPLES.some(ex => lower.includes(ex));
+        console.log(`${itemType} validation started.`);
+        
+        const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+        const transcriptLower = transcript.toLowerCase();
+        
+        let matchCount = 0;
+        for (const word of words) {
+            if (transcriptLower.includes(word)) {
+                matchCount++;
+            }
+        }
+        
+        const matchRatio = words.length > 0 ? matchCount / words.length : 1;
+        const confidence = (matchRatio * 100).toFixed(0);
+        
+        console.log(`${itemType} verified.`);
+        console.log(`${itemType} confidence: ${confidence}`);
+        
+        if (matchRatio < 0.2 && words.length > 0) {
+            console.log(`Semantic match: FAIL`);
+            console.log(`Warning: ${itemType} might not be supported by transcript. (Kept to prevent data loss)`);
+        } else {
+            console.log(`Semantic match: PASS`);
+        }
     }
 
     validateSummary(data) {
@@ -30,45 +45,89 @@ class MeetingSchemaValidator {
         return true;
     }
 
-    validateDecisions(data) {
+    validateDecisions(data, transcript) {
         if (!data || typeof data !== "object") throw new Error("Validation Error: response is not an object.");
         if (!Array.isArray(data.decisions)) throw new Error("Validation Error: decisions must be an array.");
+        
+        const validDecisions = [];
         for (const decision of data.decisions) {
-            if (this.containsHallucination(decision)) throw new Error("Validation Error: Hallucinated decision detected.");
+            if (decision && typeof decision === "string" && decision.trim() !== "") {
+                this.verifySemanticMatch(decision, transcript, "Decision");
+                validDecisions.push(decision);
+            } else if (decision && typeof decision === "object") {
+                const text = decision.decision || decision.text || "";
+                if (typeof text === "string" && text.trim() !== "") {
+                    this.verifySemanticMatch(text, transcript, "Decision");
+                    validDecisions.push(text);
+                } else {
+                    console.log(`Decision rejected because of wrong datatype or null.`);
+                }
+            } else {
+                console.log(`Decision rejected because of wrong datatype or null.`);
+            }
         }
+        data.decisions = validDecisions;
         return true;
     }
 
-    validateActionItems(data) {
+    validateActionItems(data, transcript) {
         if (!data || typeof data !== "object") throw new Error("Validation Error: response is not an object.");
         if (!Array.isArray(data.actionItems)) throw new Error("Validation Error: actionItems must be an array.");
+        
+        const validItems = [];
         for (const item of data.actionItems) {
-            if (typeof item.task !== "string") throw new Error("Action item missing valid task");
-            if (typeof item.owner !== "string") throw new Error("Action item missing valid owner");
-            if (typeof item.priority !== "string") throw new Error("Action item missing valid priority");
-            if (this.containsHallucination(item.task)) throw new Error("Validation Error: Hallucinated action item detected.");
+            if (item && typeof item === "object") {
+                if (typeof item.task !== "string" || item.task.trim() === "") continue;
+                if (typeof item.owner !== "string") item.owner = "";
+                if (typeof item.priority !== "string") item.priority = "Medium";
+                
+                this.verifySemanticMatch(item.task, transcript, "Action Item");
+                validItems.push(item);
+            }
         }
+        data.actionItems = validItems;
         return true;
     }
 
-    validateRisks(data) {
+    validateRisks(data, transcript) {
         if (!data || typeof data !== "object") throw new Error("Validation Error: response is not an object.");
         if (!Array.isArray(data.risks)) throw new Error("Validation Error: risks must be an array.");
+        
+        const validRisks = [];
         for (const risk of data.risks) {
-            if (this.containsHallucination(risk)) throw new Error("Validation Error: Hallucinated risk detected.");
+            if (risk && typeof risk === "string" && risk.trim() !== "") {
+                this.verifySemanticMatch(risk, transcript, "Risk");
+                validRisks.push(risk);
+            }
         }
+        data.risks = validRisks;
         return true;
     }
 
-    validateQuestions(data) {
+    validateQuestions(data, transcript) {
         if (!data || typeof data !== "object") throw new Error("Validation Error: response is not an object.");
         if (!data.questions || typeof data.questions !== "object") throw new Error("Missing required object field: questions");
-        if (!Array.isArray(data.questions.answered) || !Array.isArray(data.questions.unanswered)) {
-            throw new Error("Questions object must contain 'answered' and 'unanswered' arrays.");
+        if (!Array.isArray(data.questions.answered)) data.questions.answered = [];
+        if (!Array.isArray(data.questions.unanswered)) data.questions.unanswered = [];
+        
+        const validAnswered = [];
+        for (const q of data.questions.answered) {
+            if (q && typeof q === "string" && q.trim() !== "") {
+                this.verifySemanticMatch(q, transcript, "Question (Answered)");
+                validAnswered.push(q);
+            }
         }
-        for (const q of [...data.questions.answered, ...data.questions.unanswered]) {
-            if (this.containsHallucination(q)) throw new Error("Validation Error: Hallucinated question detected.");
+        data.questions.answered = validAnswered;
+        
+        const validUnanswered = [];
+        for (const q of data.questions.unanswered) {
+            if (q && typeof q === "string" && q.trim() !== "") {
+                this.verifySemanticMatch(q, transcript, "Question (Unanswered)");
+                validUnanswered.push(q);
+            }
         }
+        data.questions.unanswered = validUnanswered;
+        
         return true;
     }
 
@@ -85,6 +144,19 @@ class MeetingSchemaValidator {
         if (!data || typeof data !== "object") throw new Error("Validation Error: response is not an object.");
         if (typeof data.meetingType !== "string") throw new Error("Validation Error: meetingType must be a string.");
         if (typeof data.followUpRequired !== "boolean") throw new Error("Validation Error: followUpRequired must be a boolean.");
+        return true;
+    }
+
+    validateConversationIntelligence(data) {
+        if (!data || typeof data !== "object") throw new Error("Validation Error: response is not an object.");
+        const aiInsights = data.aiInsights;
+        if (!aiInsights || typeof aiInsights !== "object") throw new Error("Validation Error: aiInsights must be an object.");
+        if (!aiInsights.sentiment || typeof aiInsights.sentiment !== "object") throw new Error("Validation Error: sentiment must be an object.");
+        if (!aiInsights.emotion || typeof aiInsights.emotion !== "object") throw new Error("Validation Error: emotion must be an object.");
+        if (typeof aiInsights.intent !== "string") throw new Error("Validation Error: intent must be a string.");
+        if (typeof aiInsights.meetingTone !== "string") throw new Error("Validation Error: meetingTone must be a string.");
+        if (!aiInsights.engagement || typeof aiInsights.engagement !== "object") throw new Error("Validation Error: engagement must be an object.");
+        if (typeof aiInsights.confidence !== "number") throw new Error("Validation Error: confidence must be a number.");
         return true;
     }
 

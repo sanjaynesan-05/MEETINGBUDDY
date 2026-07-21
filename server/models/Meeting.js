@@ -154,6 +154,23 @@ const meetingSchema = new mongoose.Schema(
     type: String,
     default: '',
   },
+  aiInsights: {
+    sentiment: {
+      overall: { type: String, default: 'Neutral' },
+      score: { type: Number, default: 0 }
+    },
+    emotion: {
+      primary: { type: String, default: 'Neutral' },
+      secondary: { type: String, default: 'None' }
+    },
+    intent: { type: String, default: 'Unknown' },
+    meetingTone: { type: String, default: 'Neutral' },
+    engagement: {
+      level: { type: String, default: 'Medium' },
+      score: { type: Number, default: 0 }
+    },
+    confidence: { type: Number, default: 0 }
+  }
 },
     transcriptionStatus: {
       type: String,

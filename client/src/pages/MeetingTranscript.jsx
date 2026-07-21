@@ -5,7 +5,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorState from '../components/common/ErrorState';
 import StatusChip from '../components/common/StatusChip';
 import ConfirmDialog from '../components/common/ConfirmDialog';
-import AIInsights from "../components/meeting/AIInsights";
+import AIInsights from "../components/meeting/AIInsights/index";
 import { formatDate } from '../utils/formatDate';
 import { formatDuration } from '../utils/formatDuration';
 import { useTranscript } from '../hooks/useTranscript';

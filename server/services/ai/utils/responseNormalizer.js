@@ -36,6 +36,18 @@ class ResponseNormalizer {
             return cleanString(deadline);
         };
 
+        const normalizeScore = (val) => {
+            const num = parseFloat(val);
+            if (isNaN(num)) return 0;
+            return Math.max(0, Math.min(1, num));
+        };
+
+        const normalizePercent = (val) => {
+            const num = parseInt(val, 10);
+            if (isNaN(num)) return 0;
+            return Math.max(0, Math.min(100, num));
+        };
+
         // Filter out empty action items
         const rawActionItems = Array.isArray(data.actionItems) ? data.actionItems : [];
         const actionItems = rawActionItems.map(item => ({
@@ -65,7 +77,24 @@ class ResponseNormalizer {
             technologies: processList(data.technologies),
             meetingType: cleanString(data.meetingType),
             followUpRequired: Boolean(data.followUpRequired),
-            followUpReason: cleanString(data.followUpReason)
+            followUpReason: cleanString(data.followUpReason),
+            aiInsights: {
+                sentiment: {
+                    overall: cleanString(data?.aiInsights?.sentiment?.overall) || "Neutral",
+                    score: normalizeScore(data?.aiInsights?.sentiment?.score)
+                },
+                emotion: {
+                    primary: cleanString(data?.aiInsights?.emotion?.primary) || "Neutral",
+                    secondary: cleanString(data?.aiInsights?.emotion?.secondary) || "None"
+                },
+                intent: cleanString(data?.aiInsights?.intent) || "Unknown",
+                meetingTone: cleanString(data?.aiInsights?.meetingTone) || "Neutral",
+                engagement: {
+                    level: cleanString(data?.aiInsights?.engagement?.level) || "Medium",
+                    score: normalizePercent(data?.aiInsights?.engagement?.score)
+                },
+                confidence: normalizePercent(data?.aiInsights?.confidence)
+            }
         };
     }
 }
