@@ -15,18 +15,18 @@ Built as a robust foundation for a comprehensive meeting intelligence platform, 
 ## ✨ Key Features
 
 ### 🟢 Currently Implemented
-* **Secure Authentication:** JWT-based user registration and login with bcrypt password hashing.
+* **Secure Authentication:** JWT-based user registration and login with bcrypt password hashing, HTTP-only cookies, and rate limiting.
 * **Seamless Media Uploads:** Drag-and-drop interface supporting major audio/video formats (MP3, WAV, M4A, MP4, etc.) up to 100MB.
 * **Privacy-First AI Transcription:** Utilizes `faster-whisper` (CTranslate2, int8 quantization) running entirely on local CPU, ensuring sensitive meeting data never leaves your server.
+* **Speaker Diarization:** Identifies and separates multiple speakers dynamically using `pyannote.audio`.
 * **Real-Time Progress Tracking:** Live transcription progress streamed from Python to the Node.js backend and displayed dynamically on the React frontend.
 * **AI Summarization & Action Items:** Automatic generation of meeting minutes, key takeaways, and action items utilizing a local Ollama integration (e.g. `qwen2.5:7b`).
 * **Interactive Transcript Viewer:** Full-text search with match highlighting, one-click clipboard copying, and `.txt` file downloading.
-* **Enterprise RAG Chat Engine:** Chat with your meeting history using a locally hosted vector database (Qdrant). Features include dynamic prompt orchestration, response citations, confidence scoring, and conversational memory across the session.
-* **Robust Error Handling:** Decoupled AI processing ensures transcripts are saved even if LLM analysis fails. Fallback from `faster-whisper` to `openai-whisper` ensures reliable transcription.
-
-### ⚪ Planned Roadmap
-* **Sentiment & Emotion Analysis:** Understand the tone and emotional trajectory of discussions.
+* **Enterprise RAG Chat Engine:** Chat with your meeting history using a locally hosted vector database (Qdrant) and hybrid retrieval (RRF). Features include dynamic prompt orchestration, response citations, and conversational memory across the session.
+* **Sentiment & Emotion Analysis:** Understand the tone and emotional trajectory of discussions dynamically.
 * **Analytics Dashboard:** Visualize meeting durations, speaker participation, and organizational trends.
+* **Calendar & Notifications:** ICS calendar export and automated action-item reminders (Google & Outlook integrations).
+* **Robust Error Handling:** Decoupled AI processing ensures transcripts are saved even if LLM analysis fails. Fallback from `faster-whisper` to `openai-whisper` ensures reliable transcription.
 
 ---
 
@@ -187,6 +187,8 @@ npm run dev
 | `GET`  | `/api/meetings` | Retrieve user's meeting history | ✅ |
 | `GET`  | `/api/meetings/:id` | Fetch specific meeting & transcript | ✅ |
 | `DELETE`| `/api/meetings/:id` | Permanently delete meeting & media | ✅ |
+| `POST` | `/api/chat/message` | Ask RAG chatbot a question | ✅ |
+| `GET`  | `/api/calendar/ics` | Export action items as ICS | ✅ |
 
 ---
 
