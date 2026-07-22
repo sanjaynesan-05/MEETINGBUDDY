@@ -4,6 +4,7 @@ const Meeting = require('../models/Meeting');
 const { getFileType } = require('../middleware/upload');
 const { transcribeFile } = require('../services/transcriptionService');
 const meetingProcessor = require('../services/ai/processors/meeting.processor');
+const embeddingService = require('../services/embeddings/embedding.service');
 
 // @desc    Upload a meeting recording and begin transcription
 // @route   POST /api/meetings/upload
@@ -157,6 +158,11 @@ const processTranscription = async (meetingId, filePath) => {
 
     console.log(`Meeting completed`);
     
+    // Trigger embedding generation asynchronously in background
+    embeddingService.processMeetingEmbeddings(meetingId, result.text).catch((err) => {
+      console.error(`⚠️ Non-fatal embedding generation error for meeting ${meetingId}:`, err.message);
+    });
+
     const executionTime = Date.now() - totalStartTime;
     console.log(`⏱️ Execution time: ${executionTime}ms`);
 

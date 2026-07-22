@@ -177,6 +177,11 @@ const meetingSchema = new mongoose.Schema(
       enum: ['pending', 'processing', 'completed', 'failed'],
       default: 'pending',
     },
+    embeddingStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed'],
+      default: 'pending',
+    },
     transcriptionProgress: {
       type: Number,
       default: 0,

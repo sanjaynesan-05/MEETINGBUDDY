@@ -1631,3 +1631,313 @@ img {
   border-radius: var(--radius-md);
   padding: var(--space-6);
 }
+
+/* ── Enterprise Search Styles ── */
+.search-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.search-header {
+  margin-bottom: var(--space-6);
+}
+
+.search-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.search-toolbar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .search-toolbar-controls {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.search-bar-container {
+  flex: 1;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--md-on-surface-variant);
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 40px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--md-outline);
+  background: var(--md-surface-container-lowest);
+  color: var(--md-on-surface);
+  font-size: var(--text-md);
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px var(--md-primary-container);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 40px;
+  background: none;
+  border: none;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-clear-btn:hover {
+  background: var(--md-surface-variant);
+}
+
+.search-loading-icon {
+  position: absolute;
+  right: 12px;
+  color: var(--md-primary);
+}
+
+.search-filters {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.search-select {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--md-outline);
+  background: var(--md-surface-container-lowest);
+  color: var(--md-on-surface);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.search-reset-btn {
+  font-size: var(--text-sm);
+}
+
+.search-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--md-on-surface-variant);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.stats-dot {
+  opacity: 0.5;
+}
+
+.stats-version {
+  background: var(--md-surface-variant);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: var(--text-xs);
+}
+
+/* Results */
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.search-card {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  transition: all 0.2s ease;
+}
+
+.search-card:hover {
+  border-color: var(--md-outline);
+  box-shadow: var(--elevation-1);
+}
+
+.search-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.search-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.search-card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--md-on-surface);
+  margin: 0;
+}
+
+.search-card-badge {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.search-card-date {
+  font-size: var(--text-sm);
+  color: var(--md-on-surface-variant);
+}
+
+.search-card-match-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.search-match-type {
+  color: var(--md-primary);
+  font-weight: 500;
+}
+
+.search-score, .search-snippet-field {
+  color: var(--md-on-surface-variant);
+}
+
+.search-snippet {
+  font-size: var(--text-md);
+  color: var(--md-on-surface);
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+  background: var(--md-surface-container-lowest);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--md-primary);
+}
+
+.search-highlight {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: var(--md-on-surface);
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Pagination */
+.search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.pagination-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 16px;
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--md-on-surface);
+  font-size: var(--text-sm);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-btn:not(:disabled):hover {
+  background: var(--md-surface-variant);
+}
+
+.pagination-info {
+  font-size: var(--text-sm);
+  color: var(--md-on-surface-variant);
+}
+
+/* States */
+.search-empty-state, .search-error-state, .search-empty-initial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  background: var(--md-surface);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--md-outline);
+}
+
+.search-empty-initial {
+  border: none;
+  background: transparent;
+  color: var(--md-on-surface-variant);
+}
+
+.empty-icon-wrapper, .error-icon-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.empty-icon-wrapper {
+  background: var(--md-surface-variant);
+  color: var(--md-on-surface-variant);
+}
+
+.error-icon-wrapper {
+  background: var(--md-error-container);
+  color: var(--md-error);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}

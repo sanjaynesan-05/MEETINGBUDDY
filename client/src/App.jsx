@@ -13,6 +13,7 @@ import MeetingUpload from './pages/MeetingUpload';
 import MeetingTranscript from './pages/MeetingTranscript';
 import AIChatPage from './pages/AIChatPage';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
+import SearchPage from './pages/SearchPage';
 
 // Layout for authenticated pages (with Navbar + Sidebar)
 function AppLayout() {
@@ -37,7 +38,7 @@ function AppLayout() {
           {/* Future routes for Week 3+ */}
           <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
           <Route path="/analytics" element={<AnalyticsDashboard />} />
-          <Route path="/search" element={<ComingSoon title="Search" />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/settings" element={<ComingSoon title="Settings" />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
