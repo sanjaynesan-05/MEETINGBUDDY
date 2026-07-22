@@ -45,4 +45,7 @@ const auth = async (req, res, next) => {
   }
 };
 
+auth.protect = auth;
+auth.auth = auth;
+
 module.exports = auth;
