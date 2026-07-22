@@ -2,6 +2,7 @@ const Meeting = require('../../models/Meeting');
 const chunkingService = require('./chunking.service');
 const embeddingProviderFactory = require('./embedding.factory');
 const embeddingStorage = require('./embedding.storage');
+const qdrantStorage = require('./qdrantStorage');
 const { MAX_BATCH_SIZE, RETRY_LIMIT, RETRY_DELAY_MS } = require('./embedding.constants');
 
 class EmbeddingService {
@@ -119,10 +120,18 @@ class EmbeddingService {
         });
       }
 
-      // 6. Persist generated embeddings
+      // 6. Persist generated embeddings to MongoDB
       await embeddingStorage.saveChunks(chunksWithEmbeddings);
 
-      // 7. Mark status completed
+      // 7. Upsert to Qdrant for vector search
+      try {
+        await qdrantStorage.upsertChunks(chunksWithEmbeddings);
+        console.log(`[EmbeddingService] Indexed ${chunksWithEmbeddings.length} vectors in Qdrant`);
+      } catch (qdrantErr) {
+        console.error(`[EmbeddingService] Qdrant upsert failed (non-fatal):`, qdrantErr.message);
+      }
+
+      // 8. Mark status completed
       await Meeting.findByIdAndUpdate(meetingId, { embeddingStatus: 'completed' });
 
       stats.generationTimeMs = Date.now() - startTime;

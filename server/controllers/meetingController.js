@@ -5,6 +5,8 @@ const { getFileType } = require('../middleware/upload');
 const { transcribeFile } = require('../services/transcriptionService');
 const meetingProcessor = require('../services/ai/processors/meeting.processor');
 const embeddingService = require('../services/embeddings/embedding.service');
+const embeddingStorage = require('../services/embeddings/embedding.storage');
+const qdrantStorage = require('../services/embeddings/qdrantStorage');
 
 // @desc    Upload a meeting recording and begin transcription
 // @route   POST /api/meetings/upload
@@ -96,9 +98,12 @@ const processTranscription = async (meetingId, filePath) => {
 
     console.log(`Starting WhisperX...`);
 
-    // Call Whisper
+    // Call Whisper (with optional diarization)
     let lastProgressTime = 0;
-    result = await transcribeFile(filePath, {}, async (progress) => {
+    const transcribeOptions = {
+      diarize: process.env.ENABLE_DIARIZATION === 'true',
+    };
+    result = await transcribeFile(filePath, transcribeOptions, async (progress) => {
       // Throttle DB updates to once every 2 seconds to avoid slamming MongoDB
       const now = Date.now();
       if (now - lastProgressTime > 2000 || progress === 100) {
@@ -143,9 +148,18 @@ const processTranscription = async (meetingId, filePath) => {
     let formattedSegments = [];
     let plainTextTranscript = result.text;
     
+    // Format segments with speaker labels from diarization
+    const transcriptSegments = (result.segments || []).map((seg) => ({
+      start: seg.start,
+      end: seg.end,
+      text: seg.text,
+      speaker: seg.speaker || 'Unknown',
+    }));
+
     // Update meeting with transcript and AI analysis
     await Meeting.findByIdAndUpdate(meetingId, {
       transcript: result.text,
+      transcriptSegments,
       aiAnalysis: aiAnalysis,
       language: result.language,
       duration: result.duration,
@@ -240,7 +254,7 @@ const getTranscript = async (req, res) => {
     const meeting = await Meeting.findOne({
       _id: req.params.id,
       uploadedBy: req.user._id,
-    }).select('title transcript transcriptionStatus transcriptionProgress transcriptionError language wordCount duration transcriptionCompletedAt status');
+    }).select('title transcript transcriptSegments transcriptionStatus transcriptionProgress transcriptionError language wordCount duration transcriptionCompletedAt status');
 
     if (!meeting) {
       return res.status(404).json({
@@ -351,6 +365,12 @@ const deleteMeeting = async (req, res) => {
       fs.unlinkSync(meeting.filePath);
       console.log(`🗑️ Deleted file: ${meeting.filePath}`);
     }
+
+    // Delete chunks from MongoDB
+    await embeddingStorage.deleteChunksForMeeting(meeting._id.toString()).catch(() => {});
+
+    // Delete vectors from Qdrant
+    await qdrantStorage.deleteChunksForMeeting(meeting._id.toString()).catch(() => {});
 
     // Delete from database
     await Meeting.findByIdAndDelete(meeting._id);

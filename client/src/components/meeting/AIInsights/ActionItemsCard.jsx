@@ -1,13 +1,45 @@
-import { ListTodo, CheckCircle } from "lucide-react";
+import { ListTodo, Calendar } from "lucide-react";
+import { meetingAPI } from "../../../services/meetingAPI";
 
-export default function ActionItemsCard({ actionItems }) {
+export default function ActionItemsCard({ actionItems, meetingId }) {
+  const handleExportIcs = async () => {
+    if (!meetingId) return;
+    try {
+      const response = await meetingAPI.exportIcs(meetingId);
+      const blob = new Blob([response.data], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `action-items.ics`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export ICS:', err);
+    }
+  };
+
   return (
     <div className="card" style={{ marginBottom: "var(--space-6)" }}>
-      <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600, marginBottom: "var(--space-4)", display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ListTodo size={20} color="#0284c7" />
-        Action Items
-      </h3>
-      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: "var(--space-4)" }}>
+        <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ListTodo size={20} color="#0284c7" />
+          Action Items
+        </h3>
+        {actionItems && actionItems.length > 0 && meetingId && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleExportIcs}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-sm)' }}
+            title="Export as .ics calendar file"
+          >
+            <Calendar size={16} />
+            Add to Calendar
+          </button>
+        )}
+      </div>
+
       {!actionItems || actionItems.length === 0 ? (
         <div className="empty-state">
           <span>🎉</span>

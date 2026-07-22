@@ -1,20 +1,21 @@
-import axios from 'axios';
+import api from './apiClient';
 
-const api = axios.create({
-  baseURL: '/api' // Proxied via Vite
-});
+export const chatAPI = {
+  sendMessage: async ({ question, meetingId, conversationHistory }) => {
+    const payload = { question };
+    if (meetingId) payload.meetingId = meetingId;
+    if (conversationHistory) payload.conversationHistory = conversationHistory;
+
+    const response = await api.post('/chat', payload);
+    return response.data;
+  },
+};
 
 export const sendChatMessage = async (question, filters = {}) => {
-  try {
-    const response = await api.post('/ai/chat', {
-      question,
-      filters
-    });
-    return response.data;
-  } catch (error) {
-    if (error.response && error.response.data && error.response.data.error) {
-      throw new Error(error.response.data.error);
-    }
-    throw new Error('Failed to communicate with AI Gateway');
-  }
+  const response = await api.post('/chat', {
+    question,
+    meetingId: filters.meetingId || undefined,
+    conversationHistory: filters.conversationHistory || undefined,
+  });
+  return response.data;
 };

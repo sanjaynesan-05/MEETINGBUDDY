@@ -6,20 +6,37 @@ const ConfidenceBadge = ({ score }) => {
   
   const percentage = Math.round(score * 100);
   
-  let color = 'bg-red-100 text-red-800 border-red-200';
+  let bg = '#fee2e2';
+  let color = '#b91c1c';
+  let border = '#fca5a5';
   let Icon = ShieldAlert;
   
   if (percentage >= 90) {
-    color = 'bg-green-100 text-green-800 border-green-200';
+    bg = '#dcfce7';
+    color = '#15803d';
+    border = '#bbf7d0';
     Icon = ShieldCheck;
   } else if (percentage >= 70) {
-    color = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    bg = '#fef9c3';
+    color = '#a16207';
+    border = '#fef08a';
     Icon = Shield;
   }
 
   return (
-    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${color} dark:bg-opacity-20`}>
-      <Icon className="w-3.5 h-3.5" />
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '2px 8px',
+      borderRadius: 'var(--radius-full)',
+      fontSize: 'var(--text-xs)',
+      fontWeight: 500,
+      background: bg,
+      color: color,
+      border: `1px solid ${border}`,
+    }}>
+      <Icon size={14} />
       <span>Confidence: {percentage}%</span>
     </div>
   );

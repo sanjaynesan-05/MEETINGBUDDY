@@ -1,34 +1,42 @@
 import React from 'react';
-import { FileText, Clock, User } from 'lucide-react';
+import { FileText, ExternalLink } from 'lucide-react';
 
 const CitationCard = ({ citation }) => {
+  const meetingUrl = citation.meetingId
+    ? `/meetings/${citation.meetingId}`
+    : null;
+
   return (
-    <div className="flex flex-col gap-2 p-3 mt-2 text-sm bg-white border border-gray-200 rounded-lg shadow-sm cursor-pointer hover:bg-gray-50 hover:border-indigo-300 transition-colors dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-750">
-      <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 text-xs">
-        <div className="flex items-center gap-1.5">
-          <FileText className="w-3.5 h-3.5" />
-          <span className="font-medium truncate max-w-[120px]" title={citation.meetingId}>
-            {citation.meetingId}
+    <a
+      href={meetingUrl || '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="citation-card"
+      onClick={(e) => {
+        if (!meetingUrl) e.preventDefault();
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--md-on-surface-variant)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <FileText size={14} />
+          <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }} title={citation.meetingTitle || citation.meetingId}>
+            {citation.meetingTitle || citation.meetingId}
           </span>
         </div>
-        {citation.similarityScore && (
-          <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-            {Math.round(citation.similarityScore * 100)}% match
+        {citation.sourceLabel && (
+          <span style={{ color: 'var(--md-primary)', fontWeight: 600 }}>
+            {citation.sourceLabel}
           </span>
         )}
+        <ExternalLink size={12} />
       </div>
-      
-      <div className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
-        <div className="flex items-center gap-1">
-          <User className="w-3.5 h-3.5 text-gray-400" />
-          <span className="font-medium">{citation.speaker || 'Unknown'}</span>
-        </div>
-        <div className="flex items-center gap-1 text-xs">
-          <Clock className="w-3.5 h-3.5 text-gray-400" />
-          <span>{citation.startTime || '00:00:00'} - {citation.endTime || '00:00:00'}</span>
-        </div>
-      </div>
-    </div>
+
+      {citation.snippet && (
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--md-on-surface-variant)', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {citation.snippet.slice(0, 200)}...
+        </p>
+      )}
+    </a>
   );
 };
 

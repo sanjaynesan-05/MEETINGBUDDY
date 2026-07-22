@@ -277,7 +277,17 @@ export default function MeetingTranscript() {
       )}
 
       {/* Actions */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-6)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-6)' }}>
+        <Link
+          to={`/chat?meeting=${id}`}
+          className="btn btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z" />
+          </svg>
+          Ask AI about this meeting
+        </Link>
         <button
           className="btn btn-danger"
           onClick={() => setShowDeleteDialog(true)}

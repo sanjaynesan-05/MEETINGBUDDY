@@ -34,4 +34,7 @@ export const meetingAPI = {
 
   /** Delete a meeting */
   delete: (id) => apiClient.delete(`/meetings/${id}`),
+
+  /** Export action items as ICS calendar file */
+  exportIcs: (id) => apiClient.get(`/meetings/${id}/calendar/ics`, { responseType: 'blob' }),
 };

@@ -2,19 +2,25 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
 
-// Generate JWT Token
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '7d',
   });
 };
 
-// @desc    Register a new user
-// @route   POST /api/auth/register
-// @access  Public
+const setTokenCookie = (res, token) => {
+  const maxAge = 7 * 24 * 60 * 60 * 1000;
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge,
+    path: '/',
+  });
+};
+
 const register = async (req, res) => {
   try {
-    // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -29,7 +35,6 @@ const register = async (req, res) => {
 
     const { name, email, password } = req.body;
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -38,11 +43,9 @@ const register = async (req, res) => {
       });
     }
 
-    // Create user
     const user = await User.create({ name, email, password });
-
-    // Generate token
     const token = generateToken(user._id);
+    setTokenCookie(res, token);
 
     res.status(201).json({
       success: true,
@@ -65,9 +68,6 @@ const register = async (req, res) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
 const login = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -84,7 +84,6 @@ const login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    // Find user and include password for comparison
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(401).json({
@@ -93,7 +92,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({
@@ -102,8 +100,8 @@ const login = async (req, res) => {
       });
     }
 
-    // Generate token
     const token = generateToken(user._id);
+    setTokenCookie(res, token);
 
     res.status(200).json({
       success: true,
@@ -126,9 +124,21 @@ const login = async (req, res) => {
   }
 };
 
-// @desc    Get current user profile
-// @route   GET /api/auth/profile
-// @access  Private
+const logout = async (req, res) => {
+  res.cookie('token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Logged out successfully.',
+  });
+};
+
 const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -153,4 +163,4 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile };
+module.exports = { register, login, logout, getProfile };

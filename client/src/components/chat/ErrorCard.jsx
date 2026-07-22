@@ -5,17 +5,29 @@ const ErrorCard = ({ error, onRetry }) => {
   if (!error) return null;
   
   return (
-    <div className="flex flex-col items-center justify-center p-6 my-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl max-w-2xl mx-auto">
-      <AlertCircle className="w-8 h-8 text-red-500 mb-3" />
-      <p className="text-red-700 dark:text-red-400 text-sm font-medium mb-4 text-center">
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 'var(--space-6)',
+      margin: 'var(--space-4) auto',
+      background: 'var(--md-error-container)',
+      border: '1px solid var(--md-error-light)',
+      borderRadius: 'var(--radius-md)',
+      maxWidth: '600px',
+    }}>
+      <AlertCircle size={24} color="var(--md-error)" style={{ marginBottom: '8px' }} />
+      <p style={{ color: 'var(--md-error)', fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: '12px', textAlign: 'center' }}>
         {error}
       </p>
       {onRetry && (
         <button 
           onClick={onRetry}
-          className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 text-sm font-semibold rounded-lg shadow-sm border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors"
+          className="btn btn-secondary btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw size={14} />
           Retry
         </button>
       )}

@@ -51,7 +51,7 @@ export default function AIInsights({ meetingId, meetingStatus }) {
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 'var(--space-6)' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <ActionItemsCard actionItems={analysis.actionItems} />
+          <ActionItemsCard actionItems={analysis.actionItems} meetingId={meetingId} />
           <RisksCard risks={analysis.risks} />
           <DecisionsCard decisions={analysis.decisions} />
         </div>

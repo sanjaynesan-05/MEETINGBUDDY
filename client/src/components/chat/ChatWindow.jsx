@@ -7,7 +7,6 @@ import SuggestedQuestions from './SuggestedQuestions';
 const ChatWindow = ({ messages, isLoading, error, onRetry, onSuggestSelect }) => {
   const bottomRef = useRef(null);
 
-  // Auto scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
@@ -15,38 +14,48 @@ const ChatWindow = ({ messages, isLoading, error, onRetry, onSuggestSelect }) =>
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 flex flex-col scroll-smooth">
+    <div className="chat-window">
       {isEmpty && !isLoading && !error && (
-        <div className="flex flex-col items-center justify-center flex-1 text-center max-w-lg mx-auto">
-          <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900 rounded-2xl flex items-center justify-center mb-6">
-            <span className="text-3xl">👋</span>
+        <div style={{ textAlign: 'center', padding: '40px 20px', maxWidth: '500px', margin: 'auto' }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: 'var(--radius-xl)',
+            background: 'var(--md-primary-container)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px',
+            fontSize: '32px',
+          }}>
+            👋
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--md-on-surface)', marginBottom: '8px' }}>
             AI Meeting Intelligence
           </h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-8">
+          <p style={{ color: 'var(--md-on-surface-variant)', fontSize: 'var(--text-base)', marginBottom: '24px' }}>
             Ask me anything about your past meetings, decisions made, action items, or general summaries.
           </p>
           <SuggestedQuestions onSelect={onSuggestSelect} />
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto w-full">
+      <div className="chat-window-content">
         {messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
-        
+
         {isLoading && (
-          <div className="mt-4">
+          <div style={{ marginTop: '16px' }}>
             <TypingIndicator />
           </div>
         )}
-        
+
         {error && (
           <ErrorCard error={error} onRetry={onRetry} />
         )}
-        
-        <div ref={bottomRef} className="h-4" />
+
+        <div ref={bottomRef} style={{ height: '16px' }} />
       </div>
     </div>
   );

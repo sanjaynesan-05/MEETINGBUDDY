@@ -204,6 +204,15 @@ const meetingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    transcriptSegments: {
+      type: [{
+        start: Number,
+        end: Number,
+        text: String,
+        speaker: { type: String, default: 'Unknown' },
+      }],
+      default: [],
+    },
   },
   {
     timestamps: true,

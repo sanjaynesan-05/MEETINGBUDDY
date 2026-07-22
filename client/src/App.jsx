@@ -12,6 +12,7 @@ import Meetings from './pages/Meetings';
 import MeetingUpload from './pages/MeetingUpload';
 import MeetingTranscript from './pages/MeetingTranscript';
 import AIChatPage from './pages/AIChatPage';
+import TasksPage from './pages/TasksPage';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import SearchPage from './pages/SearchPage';
 
@@ -36,7 +37,7 @@ function AppLayout() {
           <Route path="/meetings/:id" element={<MeetingTranscript />} />
           <Route path="/chat" element={<AIChatPage />} />
           {/* Future routes for Week 3+ */}
-          <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
+          <Route path="/tasks" element={<TasksPage />} />
           <Route path="/analytics" element={<AnalyticsDashboard />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/settings" element={<ComingSoon title="Settings" />} />

@@ -1,25 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bot, Filter } from 'lucide-react';
+import { meetingAPI } from '../../services/meetingAPI';
 
 const ChatHeader = ({ meetingFilter, setMeetingFilter }) => {
+  const [meetings, setMeetings] = useState([]);
+
+  useEffect(() => {
+    meetingAPI.getAll().then(res => {
+      if (res.data.meetings) setMeetings(res.data.meetings);
+    }).catch(() => {});
+  }, []);
+
   return (
-    <header className="h-16 flex items-center justify-between px-6 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-10 sticky top-0 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center dark:bg-indigo-900/50">
-          <Bot className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+    <header className="chat-header">
+      <div className="chat-header-title">
+        <div className="chat-header-icon">
+          <Bot size={20} />
         </div>
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">AI Assistant</h1>
+        <span>AI Assistant</span>
       </div>
-      
-      <div className="flex items-center gap-2 text-sm">
-        <Filter className="w-4 h-4 text-gray-500" />
-        <select 
+
+      <div className="chat-header-filter">
+        <Filter size={16} />
+        <select
           value={meetingFilter}
           onChange={(e) => setMeetingFilter(e.target.value)}
-          className="bg-transparent border-none text-gray-700 dark:text-gray-300 focus:ring-0 cursor-pointer font-medium outline-none"
+          className="chat-header-select"
         >
           <option value="all">All Meetings</option>
-          <option value="meeting123">Q2 Planning (Mock)</option>
+          {meetings.map(m => (
+            <option key={m._id} value={m._id}>{m.title}</option>
+          ))}
         </select>
       </div>
     </header>

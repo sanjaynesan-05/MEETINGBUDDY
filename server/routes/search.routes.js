@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const searchController = require('../controllers/searchController');
-const { protect } = require('../middleware/auth'); // Using existing auth middleware
+const { protect } = require('../middleware/auth');
 
-// All search routes are protected
 router.use(protect);
 
 router.get('/', searchController.searchMeetings);
+router.get('/hybrid', searchController.hybridSearch);
 
 module.exports = router;

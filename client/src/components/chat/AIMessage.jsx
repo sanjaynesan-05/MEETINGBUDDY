@@ -16,19 +16,18 @@ const AIMessage = ({ content, confidence, citations = [], metadata, id }) => {
   };
 
   return (
-    <div className="flex items-start gap-4 mb-6 max-w-4xl group">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center dark:bg-indigo-900 mt-1">
-        <Bot className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
+    <div className="ai-msg-row">
+      <div className="ai-avatar">
+        <Bot size={20} />
       </div>
-      <div className="flex flex-col gap-2 min-w-0 flex-1">
-        <div className="px-5 py-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl rounded-tl-sm shadow-sm prose prose-sm sm:prose dark:prose-invert max-w-none">
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className="ai-msg-bubble">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {content}
           </ReactMarkdown>
         </div>
         
-        {/* Footer actions and metadata */}
-        <div className="flex flex-wrap items-center gap-3 px-1 mt-1">
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', fontSize: 'var(--text-xs)', color: 'var(--md-on-surface-variant)' }}>
           <MessageToolbar onCopy={handleCopy} copied={copied} />
           
           {confidence !== undefined && (
@@ -36,22 +35,18 @@ const AIMessage = ({ content, confidence, citations = [], metadata, id }) => {
           )}
           
           {metadata?.responseTime && (
-            <span className="text-xs text-gray-400">
+            <span>
               {(metadata.responseTime / 1000).toFixed(2)}s
-            </span>
-          )}
-          {metadata?.model && (
-            <span className="text-xs text-gray-400 capitalize">
-              {metadata.model}
             </span>
           )}
         </div>
 
-        {/* Citations Panel */}
         {citations && citations.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sources</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div style={{ marginTop: '12px' }}>
+            <p style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--md-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              Sources & Citations
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '8px' }}>
               {citations.map((cit, idx) => (
                 <CitationCard key={idx} citation={cit} />
               ))}

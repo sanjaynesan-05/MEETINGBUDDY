@@ -3,13 +3,24 @@ import { Copy, Check } from 'lucide-react';
 
 const MessageToolbar = ({ onCopy, copied }) => {
   return (
-    <div className="flex items-center">
+    <div style={{ display: 'flex', alignItems: 'center' }}>
       <button 
         onClick={onCopy}
-        className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 text-xs font-medium"
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '4px 8px',
+          borderRadius: 'var(--radius-sm)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: 'var(--text-xs)',
+          color: 'var(--md-on-surface-variant)',
+        }}
         title="Copy Answer"
       >
-        {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+        {copied ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
         {copied ? 'Copied' : 'Copy'}
       </button>
     </div>

@@ -10,17 +10,17 @@ const SuggestedQuestions = ({ onSelect }) => {
   ];
 
   return (
-    <div className="mt-6 flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm text-gray-500 font-medium px-1 dark:text-gray-400">
-        <Sparkles className="w-4 h-4 text-indigo-500" />
+    <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-sm)', color: 'var(--md-on-surface-variant)', fontWeight: 500, justifyContent: 'center' }}>
+        <Sparkles size={16} color="var(--md-primary)" />
         Suggested Questions
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
         {questions.map((q, idx) => (
           <button
             key={idx}
             onClick={() => onSelect(q)}
-            className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-full hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-indigo-400"
+            className="suggested-btn"
           >
             {q}
           </button>

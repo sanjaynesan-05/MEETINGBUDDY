@@ -85,6 +85,10 @@ def main():
                         help='Whisper model size (tiny, base, small, medium, large-v3)')
     parser.add_argument('--language', type=str, default=None,
                         help='Language code (e.g., en, es, fr). None for auto-detect.')
+    parser.add_argument('--diarize', action='store_true',
+                        help='Enable speaker diarization with pyannote.audio')
+    parser.add_argument('--hf-token', type=str, default=None,
+                        help='HuggingFace token for pyannote.audio models')
     args = parser.parse_args()
 
     # 1. Resolve absolute path
@@ -191,6 +195,59 @@ def main():
 
         elapsed = round(time.time() - start_time, 2)
 
+        # 6. Optional Diarization
+        speaker_segments = []
+        if args.diarize:
+            try:
+                from pyannote.audio import Pipeline as DiarizationPipeline
+
+                hf_token = args.hf_token or os.environ.get("HF_TOKEN")
+                if not hf_token:
+                    raise ValueError("HF_TOKEN required for diarization")
+
+                diarization_pipeline = DiarizationPipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=hf_token,
+                )
+
+                diarization = diarization_pipeline(file_path)
+                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                    speaker_segments.append({
+                        "speaker": speaker,
+                        "start": round(turn.start, 2),
+                        "end": round(turn.end, 2),
+                    })
+
+                # Merge speaker labels with transcript segments
+                merged_segments = []
+                for seg in segments_list:
+                    seg_start = seg["start"]
+                    seg_end = seg["end"]
+                    assigned_speaker = None
+                    best_overlap = 0
+
+                    for spk in speaker_segments:
+                        overlap_start = max(seg_start, spk["start"])
+                        overlap_end = min(seg_end, spk["end"])
+                        overlap = max(0, overlap_end - overlap_start)
+                        if overlap > best_overlap:
+                            best_overlap = overlap
+                            assigned_speaker = spk["speaker"]
+
+                    merged_segments.append({
+                        **seg,
+                        "speaker": assigned_speaker or "Unknown",
+                    })
+
+                segments_list = merged_segments
+                print(f"PROGRESS: 100.0")
+                sys.stdout.flush()
+
+            except ImportError:
+                print("Warning: pyannote.audio not installed. Skipping diarization.", file=sys.stderr)
+            except Exception as dia_err:
+                print(f"Warning: Diarization failed: {dia_err}. Continuing without speaker labels.", file=sys.stderr)
+
         output = {
             "success": True,
             "text": text,
@@ -200,6 +257,8 @@ def main():
             "engine": "faster-whisper" if use_faster else "openai-whisper",
             "processingTime": elapsed,
             "diagnostics": diagnostics,
+            "segments": segments_list if segments_list else None,
+            "speakers": list(set(s["speaker"] for s in speaker_segments if "speaker" in s)) if speaker_segments else None,
         }
 
         print(json.dumps(output, ensure_ascii=False))

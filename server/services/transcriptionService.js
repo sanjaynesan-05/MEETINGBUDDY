@@ -24,6 +24,13 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
     if (language) {
       args.push('--language', language);
     }
+    if (options.diarize) {
+      args.push('--diarize');
+      const hfToken = process.env.HF_TOKEN;
+      if (hfToken) {
+        args.push('--hf-token', hfToken);
+      }
+    }
 
     console.log(`⚡ Running: python ${args.join(' ')}`);
     const startTime = Date.now();
@@ -39,21 +46,31 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
       reject(new Error(`Transcription timed out after ${TIMEOUT_MS / 1000}s.`));
     }, TIMEOUT_MS);
 
+    let lineBuffer = '';
     pythonProcess.stdout.on('data', (data) => {
-      const chunk = data.toString('utf-8');
+      lineBuffer += data.toString('utf-8');
       
-      // Look for progress lines e.g. "PROGRESS: 45.2"
-      const lines = chunk.split('\n');
-      for (const line of lines) {
+      let newlineIdx;
+      while ((newlineIdx = lineBuffer.indexOf('\n')) !== -1) {
+        const line = lineBuffer.slice(0, newlineIdx);
+        lineBuffer = lineBuffer.slice(newlineIdx + 1);
+        
         if (line.startsWith('PROGRESS:')) {
           const percent = parseFloat(line.split(':')[1].trim());
           if (!isNaN(percent)) {
-            // Log to terminal backend logs as requested
             console.log(`[Meeting Processing] Transcription Progress: ${percent.toFixed(1)}%`);
             if (onProgress) onProgress(percent);
           }
         } else if (line.trim().length > 0) {
           stdoutData += line + '\n';
+        }
+      }
+    });
+
+    pythonProcess.stdout.on('end', () => {
+      if (lineBuffer.trim().length > 0) {
+        if (!lineBuffer.startsWith('PROGRESS:')) {
+          stdoutData += lineBuffer;
         }
       }
     });
@@ -71,20 +88,17 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
       }
 
       try {
-        // Find the JSON block in the stdout data
-        // We look for the last line that starts with { and ends with }
-        const outputLines = stdoutData.trim().split('\n');
+        // Find the JSON block in the stdout data using first '{' and last '}'
         let jsonStr = null;
-        for (let i = outputLines.length - 1; i >= 0; i--) {
-          const line = outputLines[i].trim();
-          if (line.startsWith('{') && line.endsWith('}')) {
-            jsonStr = line;
-            break;
-          }
+        const startIdx = stdoutData.indexOf('{');
+        const endIdx = stdoutData.lastIndexOf('}');
+
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          jsonStr = stdoutData.substring(startIdx, endIdx + 1);
         }
 
         if (!jsonStr) {
-          throw new Error('Could not find JSON output in python script response.');
+          throw new Error('Could not find valid JSON object in python script output.');
         }
 
         const result = JSON.parse(jsonStr);
@@ -100,6 +114,8 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
           language: result.language,
           duration: result.duration,
           wordCount: result.wordCount,
+          segments: result.segments || null,
+          speakers: result.speakers || null,
         });
       } catch (parseError) {
         reject(new Error(`Failed to parse Whisper output: ${stdoutData.substring(0, 500)}`));
