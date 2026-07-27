@@ -32,10 +32,11 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
       }
     }
 
-    console.log(`⚡ Running: python ${args.join(' ')}`);
+    const pythonExe = process.env.PYTHON_PATH || 'python';
+    console.log(`⚡ Running: ${pythonExe} ${args.join(' ')}`);
     const startTime = Date.now();
 
-    const pythonProcess = spawn('python', args);
+    const pythonProcess = spawn(pythonExe, args);
 
     let stdoutData = '';
     let stderrData = '';
@@ -154,8 +155,9 @@ const transcribeFile = async (filePath, options = {}, onProgress = null) => {
 };
 
 const checkWhisperAvailability = () => {
+  const pythonExe = process.env.PYTHON_PATH || 'python';
   return new Promise((resolve) => {
-    execFile('python', ['--version'], { timeout: 5000 }, (error, stdout) => {
+    execFile(pythonExe, ['--version'], { timeout: 5000 }, (error, stdout) => {
       if (error) {
         return resolve({
           available: false,
@@ -164,7 +166,7 @@ const checkWhisperAvailability = () => {
       }
 
       execFile(
-        'python',
+        pythonExe,
         ['-c', 'try:\n from faster_whisper import WhisperModel; print("faster-whisper")\nexcept:\n import whisper; print(f"openai-whisper {whisper.__version__}")'],
         { timeout: 10000 },
         (err, out) => {
