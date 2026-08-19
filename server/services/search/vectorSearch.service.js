@@ -1,4 +1,4 @@
-const { qdrantClient, COLLECTION_NAME } = require('../embeddings/qdrantStorage');
+const { qdrantClient, COLLECTION_NAME, QDRANT_ENABLED, searchPoints } = require('../embeddings/qdrantStorage');
 const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('./search.constants');
 
 class VectorSearchService {
@@ -13,7 +13,8 @@ class VectorSearchService {
       return {
         success: true,
         query: '',
-        stats: { executionTimeMs: 0, searchedMeetings: 0, returned: 0 },
+        source: QDRANT_ENABLED ? 'vector' : 'unavailable',
+        stats: { executionTimeMs: 0, searchedMeetings: 0, returned: 0, vectorSearchAvailable: QDRANT_ENABLED },
         pagination: { page: 1, limit: limitNum, total: 0 },
         results: [],
       };
@@ -24,7 +25,8 @@ class VectorSearchService {
       return {
         success: true,
         query,
-        stats: { executionTimeMs: Date.now() - startTime, searchedMeetings: 0, returned: 0 },
+        source: QDRANT_ENABLED ? 'vector_failed' : 'unavailable',
+        stats: { executionTimeMs: Date.now() - startTime, searchedMeetings: 0, returned: 0, vectorSearchAvailable: QDRANT_ENABLED },
         pagination: { page: 1, limit: limitNum, total: 0 },
         results: [],
       };
@@ -35,25 +37,27 @@ class VectorSearchService {
       mustConditions.push({ key: 'meetingId', match: { value: meetingId } });
     }
 
-    const searchParams = {
-      vector: embedding,
-      limit: limitNum,
-      with_payload: true,
-      with_vector: false,
-    };
-    if (mustConditions.length > 0) {
-      searchParams.filter = { must: mustConditions };
-    }
-
     let searchResults;
     try {
-      searchResults = await qdrantClient.search(COLLECTION_NAME, searchParams);
+      searchResults = await searchPoints(embedding, { must: mustConditions }, limitNum);
     } catch (err) {
       console.error('[VectorSearch] Qdrant search error:', err.message);
       return {
         success: true,
         query,
-        stats: { executionTimeMs: Date.now() - startTime, searchedMeetings: 0, returned: 0 },
+        source: 'error',
+        stats: { executionTimeMs: Date.now() - startTime, searchedMeetings: 0, returned: 0, vectorSearchAvailable: false },
+        pagination: { page: 1, limit: limitNum, total: 0 },
+        results: [],
+      };
+    }
+
+    if (!searchResults) {
+      return {
+        success: true,
+        query,
+        source: QDRANT_ENABLED ? 'qdrant_unavailable' : 'unavailable',
+        stats: { executionTimeMs: Date.now() - startTime, searchedMeetings: 0, returned: 0, vectorSearchAvailable: QDRANT_ENABLED },
         pagination: { page: 1, limit: limitNum, total: 0 },
         results: [],
       };
@@ -71,10 +75,12 @@ class VectorSearchService {
     return {
       success: true,
       query,
+      source: 'vector',
       stats: {
         executionTimeMs: Date.now() - startTime,
         searchedMeetings: searchResults.length,
         returned: formattedResults.length,
+        vectorSearchAvailable: QDRANT_ENABLED,
       },
       pagination: {
         page: pageNum,
@@ -86,6 +92,7 @@ class VectorSearchService {
   }
 
   async _generateEmbedding(text) {
+    if (!QDRANT_ENABLED) return null;
     try {
       const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
       const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';

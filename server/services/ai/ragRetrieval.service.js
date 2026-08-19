@@ -2,6 +2,7 @@ const rrfService = require('../search/rrf.service');
 const searchService = require('../search/search.service');
 const Meeting = require('../../models/Meeting');
 const MeetingChunk = require('../../models/MeetingChunk');
+const { QDRANT_ENABLED } = require('../embeddings/qdrantStorage');
 
 const DEFAULT_TOP_N = 5;
 const MAX_CONTEXT_CHARS = 10000;
@@ -9,29 +10,38 @@ const MAX_CONTEXT_CHARS = 10000;
 class RagRetrievalService {
   async retrieveForChat({ question, meetingId, userId, topN = DEFAULT_TOP_N }) {
     if (!question || !question.trim()) {
-      return { chunks: [], totalChars: 0 };
+      return { chunks: [], totalChars: 0, source: 'empty' };
     }
 
     const params = { q: question, limit: topN * 2 };
     if (meetingId && meetingId !== 'all') params.meetingId = meetingId;
 
     let results = [];
+    let retrievalSource = 'none';
+
+    // Step 1: Try hybrid search (keyword + vector via Qdrant)
     try {
       const hybridRes = await rrfService.hybridSearch(userId, params);
       results = hybridRes.results || [];
+      if (results.length > 0) {
+        retrievalSource = 'hybrid';
+      }
     } catch (err) {
       console.warn('[RagRetrieval] Hybrid search failed, attempting keyword search:', err.message);
       try {
         const kwRes = await searchService.search(userId, params);
         results = kwRes.results || [];
+        if (results.length > 0) {
+          retrievalSource = 'keyword';
+        }
       } catch (kwErr) {
         console.warn('[RagRetrieval] Keyword search failed:', kwErr.message);
       }
     }
 
-    // Fallback: If no results found from hybrid/keyword search, query MongoDB chunks or Meeting directly
+    // Step 2: If no results from search, fall back to MongoDB direct retrieval
     if (results.length === 0) {
-      console.log('[RagRetrieval] Fetching MongoDB transcript context fallback...');
+      console.log('[RAG] Falling back to MongoDB transcript context...');
       try {
         const meetingQuery = { status: 'completed' };
         if (userId) meetingQuery.uploadedBy = userId;
@@ -40,7 +50,7 @@ class RagRetrievalService {
         const meetings = await Meeting.find(meetingQuery).limit(5).lean();
 
         for (const meeting of meetings) {
-          // Check chunks first
+          // Check chunks first (vector chunks stored in MongoDB)
           const dbChunks = await MeetingChunk.find({ meetingId: meeting._id }).limit(3).lean();
           if (dbChunks && dbChunks.length > 0) {
             for (const c of dbChunks) {
@@ -61,6 +71,9 @@ class RagRetrievalService {
               score: 0.5,
             });
           }
+        }
+        if (results.length > 0) {
+          retrievalSource = 'mongodb_fallback';
         }
       } catch (dbErr) {
         console.error('[RagRetrieval] MongoDB fallback retrieval failed:', dbErr.message);
@@ -89,7 +102,9 @@ class RagRetrievalService {
       if (chunks.length >= topN) break;
     }
 
-    return { chunks, totalChars };
+    console.log(`[RAG] Retrieval source: ${retrievalSource}, chunks: ${chunks.length}, qdrantEnabled: ${QDRANT_ENABLED}`);
+
+    return { chunks, totalChars, source: retrievalSource };
   }
 }
 

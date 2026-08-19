@@ -14,18 +14,19 @@ class RagChatService {
 
     const history = this._boundHistory(conversationHistory);
 
-    const { chunks } = await ragRetrieval.retrieveForChat({
-      question: cleanQuestion,
-      meetingId,
-      userId,
-    });
+    const { chunks, source: retrievalSource } = await ragRetrieval.retrieveForChat({
+       question: cleanQuestion,
+       meetingId,
+       userId,
+     });
 
-    if (!chunks || chunks.length === 0) {
-      return this._noContextResponse(
-        "I couldn't find that information in the meeting transcripts. The question may be outside the scope of the available meeting data.",
-        startTime
-      );
-    }
+     if (!chunks || chunks.length === 0) {
+       return this._noContextResponse(
+         "I couldn't find that information in the meeting transcripts. The question may be outside the scope of the available meeting data.",
+         startTime,
+         retrievalSource
+       );
+     }
 
     const prompt = this._buildPrompt(cleanQuestion, chunks, history);
     const ollamaResponse = await this._callOllama(prompt);
@@ -43,16 +44,17 @@ class RagChatService {
 
     const finalAnswer = this._injectFallbackCitations(answer, citations, chunks);
 
-    return {
-      success: true,
-      answer: finalAnswer,
-      citations,
-      metadata: {
-        responseTime: Date.now() - startTime,
-        chunksUsed: chunks.length,
-        model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
-      },
-    };
+     return {
+       success: true,
+       answer: finalAnswer,
+       citations,
+       metadata: {
+         responseTime: Date.now() - startTime,
+         chunksUsed: chunks.length,
+         model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+         retrievalSource,
+       },
+     };
   }
 
   _boundHistory(history) {
@@ -138,18 +140,19 @@ class RagChatService {
     return answer + `\n\n---\n_Source: [${top.sourceLabel}] ${top.meetingId}_`;
   }
 
-  _noContextResponse(message, startTime) {
-    return {
-      success: true,
-      answer: message,
-      citations: [],
-      metadata: {
-        responseTime: Date.now() - startTime,
-        chunksUsed: 0,
-        model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
-      },
-    };
-  }
+   _noContextResponse(message, startTime, retrievalSource = 'none') {
+     return {
+       success: true,
+       answer: message,
+       citations: [],
+       metadata: {
+         responseTime: Date.now() - startTime,
+         chunksUsed: 0,
+         model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+         retrievalSource,
+       },
+     };
+   }
 }
 
 module.exports = new RagChatService();

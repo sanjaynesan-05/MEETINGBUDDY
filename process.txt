@@ -1,0 +1,152 @@
+📊 AI Meeting Intelligence System — Project Status Report
+Based on runtime verification, not code existence | Date: Aug 19, 2026
+🔴 Overall Status: PARTIALLY FUNCTIONAL
+The project documentation (PROJECT_IMPLEMENTATION_STATUS.md) claims 100% completion. Runtime verification reveals a significantly different reality: the server boots and many features work with existing data, but the core transcription pipeline is completely broken, the vector database is offline, and there is a critical RAG chat bug plus two disconnected AI codebases.
+✅ What Actually Works (Runtime-Verified)
+Server Infrastructure
+- Server boots successfully, connects to MongoDB at localhost:27017 ✓
+- Express 5.2.1 with helmet, CORS, rate limiting, cookie-parser ✓
+- MongoDB connection established ✓
+Authentication & Security (15/15 tests pass)
+- Registration: Tested live → creates account, returns JWT, sets HTTP-only cookie ✓
+- Login: Tested live → validates credentials, returns JWT ✓
+- JWT token generation, verification, expiry, and refresh ✓
+- bcrypt password hashing ✓
+- Auth middleware with Bearer token & cookie support ✓
+- Rate limiting (auth: 20/15min, search: 60/min, chat: 30/min) ✓
+- Helmet security headers ✓
+- CORS configured ✓
+AI Meeting Intelligence (Verified with real existing data)
+An existing meeting ("Effective Meetings_ Simulated Exercise for Chairing & Minute Taking") in the database confirms the full AI pipeline has run successfully:
+- Summary generation via Ollama qwen2.5:7b ✓ (verified: "During today's monthly meeting...")
+- 6 decisions extracted ✓
+- 7 action items with owner, deadline, priority ✓
+- Sentiment analysis: {"overall":"Neutral","score":0.75} ✓
+- Keywords, people, organizations, meeting type ✓
+- 10 modular extractors (summary, agenda, decisions, actionItems, risks, questions, entities, classifier, conversationIntelligence) — all functional ✓
+- Ollama running with 9 models (qwen2.5:7b, nomic-embed-text, llama3.1:8b, etc.) ✓
+Keyword Search (Tests pass with real data)
+- Case-insensitive regex search ✓ (tested with "TEAM", "tEaM", "team", "tea")
+- Filters: meeting type, date range ✓
+- Pagination ✓ (page 2, limit 1 → correct results)
+- Snippet highlighting ✓
+- Score-based sorting ✓
+Analytics (Tests pass with real data)
+- Dashboard: total meetings, duration, AI summaries, pending actions ✓
+- Health: meeting status counts (2 completed, 1 processing, 0 pending) ✓
+- Sentiment distribution ✓, Emotion distribution ✓, Engagement metrics ✓
+- Meeting trends ✓, Top keywords ✓, Top participants ✓, Meeting types ✓, Action item stats ✓
+Calendar Integration (18/18 tests pass)
+- ICS file generation ✓
+- Action items exported to calendar events ✓
+- Real meeting ICS export tested ✓
+Notifications (15/15 tests pass)
+- Creation, deduplication, read/unread status ✓
+- Deadline parsing ✓
+- Cron job registered ✓
+- SMTP not configured (email disabled, non-fatal) ⚠️
+Embedding Infrastructure (21/21 tests pass)
+- Context-aware chunking (paragraph/sentence boundaries) ✓
+- SHA-256 content hashing ✓
+- Provider factory pattern (Ollama/OpenAI/Mock) ✓
+- Batch processing with retry ✓
+- MongoDB storage with incremental updates (0 duplicate calls) ✓
+- Mock provider used as fallback when Ollama unavailable ✓
+Hybrid Search / RRF (20/20 unit tests pass)
+- Reciprocal Rank Fusion math verified ✓
+- Handles keyword-only, vector-only, and combined results ✓
+❌ What's Broken (Runtime-Verified)
+1. Speech-to-Text Transcription — COMPLETELY BROKEN
+This is the project's core feature and it cannot run at all.
+- Python 3.11.9 is installed ✓, but ALL required ML packages are missing:
+- faster-whisper: ❌ Not installed
+- torch: ❌ Not installed
+- openai-whisper: ❌ Not installed
+- pyannote.audio: ❌ Not installed
+- The transcribe.py script (282 lines) requires these packages
+- FFmpeg 8.1.2 IS installed and configured ✓
+- The checkWhisperAvailability() will always return available: false
+- No new meeting uploads can be transcribed — the system cannot process a single new audio file
+- Existing transcripts in DB were generated on a previous setup (different environment)
+2. Qdrant Vector Database — NOT RUNNING
+- Port 6333 is not listening ❌
+- Vector Search test: 0/3 FAIL (ECONNREFUSED)
+- /api/ai/health → returns {"success":false,"error":"fetch failed"} ❌
+- /api/ai/chat → returns {"success":false,"error":"fetch failed"} ❌
+- The entire src/modules/ai/ pipeline is non-functional (no fallback)
+- Embedding upsert to Qdrant fails (non-fatal — saved to MongoDB instead)
+3. /api/health Endpoint — BROKEN
+- Returns {"success":false,"message":"Access denied. No token provided."} ❌
+- Root cause: Route ordering bug in server.js:70
+app.use('/api', require('./routes/calendar.routes.js'));  // line 70 — mounts auth middleware at /api/*
+app.get('/api/health', ...);                                // line 74 — defined AFTER, never reached
+The calendar router has router.use(protect) which intercepts /api/health before the health handler runs.
+4. RAG Chat Response Format Bug — VERIFIED
+- The /api/chat endpoint responds, but returns raw JSON as the answer instead of plain text ✓ (endpoint responsive) ❌ (output malformed)
+- Root cause: ollama.service.js:58 hardcodes format: "json":
+const response = await ollama.chat({
+    model: this.model,
+    format: "json",  // HARDCODED — always applied, even for Q&A
+    ...
+});
+The ask() method passes { format: undefined } but this has no effect because format is not spread from options into the ollama.chat() call.
+- Verified end-to-end: Chat response was returned as:
+{"decisions": [{"decision": "No specific decisions...", "source": "[S1],[S2],[S3]"}]}
+instead of clean plain-text answer.
+5. Vector Search — FAILS (3/3 tests)
+- Requires Qdrant which is not running
+- No fallback in the vector search service itself
+🏗️ Architecture Issues
+Two Completely Disconnected AI Implementations
+Aspect	services/ (Main Flow)	src/modules/ai/ (Wired at /api/ai/*)
+Used by	controllers/ (meeting, chat, analytics)	Standalone /api/ai/* endpoints
+Qdrant dependency	Optional (has MongoDB fallback)	Mandatory (no fallback)
+Status	✅ Functional with fallbacks	❌ Non-functional (Qdrant down)
+Connected to main flow	✅ Yes	❌ No — dead code
+The PROJECT_IMPLEMENTATION_STATUS.md describes the services/ implementation as complete. The src/modules/ai/ implementation was added separately and wired into server.js but never integrated with the actual meeting processing pipeline. The meeting controller uses services/embeddings/embedding.service.js, NOT src/modules/ai/services/embeddingService.js. The chat controller uses services/ai/ragChat.service.js, NOT src/modules/ai/services/chatOrchestratorService.js.
+Missing test-ai.js Execution
+The test-ai.js and test-meeting.js scripts exist but were not run as they require transcription (broken) or end-to-end meeting processing.
+🧪 Test Results Summary
+Test Suite	Total	Passed	Failed	Notes
+Embeddings	21	21	0	Uses Mock provider; Qdrant non-fatal
+Analytics	19+	19+	0	Tested with real DB data
+Search	—	All	0	Tested with real DB data
+RAG Chat (unit)	18	18	0	Unit tests only; no real Ollama calls
+Hybrid Search/RRF	20	20	0	Pure math tests
+Notifications	15	15	0	SMTP disabled
+Calendar	18	18	0	Real ICS export tested
+Security	15	15	0	JWT, rate limit, helmet, cookies
+Vector Search	3	0	3	Requires Qdrant
+End-to-End AI	—	—	—	Format bug confirmed
+Total: ~104 tests pass, 3 fail, 1 critical runtime bug confirmed
+📋 Environment Reality Check
+Component	Expected	Actual	Status
+MongoDB	Local 27017	Running ✓	✅
+Ollama	Local 11434	Running ✓ (9 models)	✅
+Qdrant	Local 6333	Not running	❌
+FFmpeg	PATH or env	Installed v8.1.2 ✓	✅
+faster-whisper	pip install	Not installed	❌
+torch	pip install	Not installed	❌
+pyannote.audio	pip install	Not installed	❌
+SMTP	Optional	Not configured	⚠️
+📌 Discrepancy with Documentation
+The project claims 100% completion across all features. The actual state:
+Documentation Claim	Reality
+"Speech-to-Text Transcription: 100%"	❌ Python packages missing, transcription cannot run
+"Vector Search & Hybrid RAG: 100%"	❌ Qdrant offline, vector search fails, /api/ai/* broken
+"AI Conversational Chat Bot: 100%"	⚠️ Responds but returns JSON instead of plain text
+"Enterprise Health Endpoint: 100%"	❌ /api/health blocked by route ordering bug
+"Speaker Diarization: 100%"	❌ pyannote.audio not installed
+🔧 Fix Priorities
+Critical (Blocks core functionality)
+1. Install Python ML packages: pip install faster-whisper openai-whisper torch pyannote.audio
+2. Start Qdrant: docker run -p 6333:6333 qdrant/qdrant (or install and run locally)
+3. Fix /api/health route ordering: Move app.get('/api/health') BEFORE app.use('/api', ...) in server.js
+4. Fix RAG chat format bug: Remove hardcoded format: "json" from ollama.service.js:58 — use format: options.format instead
+High (Architecture)
+5. Consolidate dual AI implementations: Remove the unused src/modules/ai/ directory OR fully integrate it into the main controllers. Having two separate, disconnected AI pipelines is a maintenance hazard.
+Medium
+6. Configure SMTP: Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env for email notifications
+7. Fix MongoDB deprecation warning: Replace { new: true } with { returnDocument: 'after' } in notification service
+8. Test the frontend: Verify dev server starts and all pages render with live API
+Bottom line: The project's backend infrastructure, authentication, existing-data analytics, search, and AI analysis are solid and well-tested (104+ tests pass). However, the primary user journey — upload a meeting → transcribe → analyze → chat — is completely broken due to missing Python dependencies, a non-running Qdrant instance, a route ordering bug, and an LLM response format bug. The documentation's 100% completion claim does not match runtime reality.

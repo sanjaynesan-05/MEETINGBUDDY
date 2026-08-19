@@ -6,12 +6,21 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
+const { checkHealth: checkQdrantHealth, QDRANT_ENABLED } = require('./services/embeddings/qdrantStorage');
 
 dotenv.config();
 
 const app = express();
 
 connectDB();
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️  Unhandled Rejection at:', promise, 'reason:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️  Uncaught Exception:', err);
+});
 
 // Security middleware
 app.use(helmet());
@@ -59,18 +68,7 @@ app.use('/api/chat', chatLimiter);
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/meetings', require('./routes/meetings'));
-app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/ai', require('./src/modules/ai/routes/ai.routes'));
-app.use('/api/analytics', require('./routes/analytics.routes.js'));
-app.use('/api/search', require('./routes/search.routes.js'));
-app.use('/api/chat', require('./routes/chat.routes.js'));
-app.use('/api', require('./routes/calendar.routes.js'));
-app.use('/api/notifications', require('./routes/notification.routes.js'));
-app.use('/api/tasks', require('./routes/tasks.routes.js'));
-
+// Public health check — must be registered BEFORE any protected /api prefix middleware
 app.get('/api/health', async (req, res) => {
   const { checkWhisperAvailability } = require('./services/transcriptionService');
   const whisperStatus = await checkWhisperAvailability();
@@ -82,6 +80,18 @@ app.get('/api/health', async (req, res) => {
     whisper: whisperStatus,
   });
 });
+
+// API Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/meetings', require('./routes/meetings'));
+app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/ai', require('./src/modules/ai/routes/ai.routes'));
+app.use('/api/analytics', require('./routes/analytics.routes.js'));
+app.use('/api/search', require('./routes/search.routes.js'));
+app.use('/api/chat', require('./routes/chat.routes.js'));
+app.use('/api', require('./routes/calendar.routes.js'));
+app.use('/api/notifications', require('./routes/notification.routes.js'));
+app.use('/api/tasks', require('./routes/tasks.routes.js'));
 
 app.use((req, res) => {
   res.status(404).json({
@@ -99,7 +109,34 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📡 Health check: http://localhost:${PORT}/api/health`);
-});
+
+const startServer = async () => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📡 Health check: http://localhost:${PORT}/api/health`);
+  });
+
+  // Non-blocking startup Qdrant health check
+  setImmediate(async () => {
+    try {
+      if (!QDRANT_ENABLED) {
+        console.log('[Qdrant] QDRANT_ENABLED is false — vector search disabled');
+        return;
+      }
+      const health = await checkQdrantHealth();
+      if (health.available) {
+        console.log(`[Qdrant] Connected to ${health.collection} (dim=${health.vectorDimension}, exists=${health.collectionExists})`);
+        if (health.dimensionMismatch) {
+          console.warn(`[Qdrant] WARNING: Vector dimension mismatch — vector search may return poor results`);
+        }
+      } else {
+        console.warn(`[Qdrant] UNAVAILABLE — vector search disabled. Reason: ${health.reason}`);
+        console.warn('[Qdrant] RAG will fall back to keyword search and MongoDB. Start Qdrant for full vector search.');
+      }
+    } catch (err) {
+      console.warn('[Qdrant] Health check failed during startup:', err.message);
+    }
+  });
+};
+
+startServer();

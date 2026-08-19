@@ -10,6 +10,7 @@ class OllamaService {
         this.defaultOptions = {
             temperature: parseFloat(process.env.TEMPERATURE || "0"),
             num_ctx: parseInt(process.env.MAX_CONTEXT || "8192", 10),
+            format: "json",
         };
         if (!this.gpuEnabled) {
             this.defaultOptions.num_gpu = 0;
@@ -55,7 +56,7 @@ class OllamaService {
             const start = Date.now();
             const response = await ollama.chat({
                 model: this.model,
-                format: "json",
+                format: currentOptions.format,
                 options: opts,
                 messages: [{ role: "user", content: prompt }],
             });
