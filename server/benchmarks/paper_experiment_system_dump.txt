@@ -1,0 +1,1345 @@
+﻿============================================================
+FINAL YEAR PROJECT - EXPERIMENTAL SYSTEM DUMP
+Generated: 2026-10-06 11:17:57
+============================================================
+
+========== 1. ENV CONFIG ==========
+MAX_FILE_SIZE=104857600
+WHISPER_MODEL=large-v3-turbo
+# Production model guard; set true ONLY for development/testing
+STT_ALLOW_DEV_MODELS=false
+QUALITY_GATE_RETRY=40
+QUALITY_GATE_MAX_HALLUCINATION_RATE=0.30
+QUALITY_GATE_MAX_REPETITION_RATE=0.45
+# Retry engine
+STT_MAX_RETRIES=2
+STT_RETRY_DELAY_MS=2000
+# Ollama Embedding Configuration
+OLLAMA_URL=http://localhost:11434
+EMBEDDING_MODEL=nomic-embed-text
+RETRIEVAL_MAX_CONTEXT_CHUNKS=5
+RETRIEVAL_MAX_CONTEXT_CHARACTERS=10000
+MAX_PROMPT_CHARACTERS=32000
+MAX_CONTEXT_CHARACTERS=24000
+MAX_SYSTEM_PROMPT=4000
+MAX_USER_PROMPT=4000
+OLLAMA_MODEL=qwen2.5:7b
+MAX_RESPONSE_TOKENS=1024
+GENERATION_TEMPERATURE=0.3
+CHAT_MAX_QUESTION_LENGTH=1000
+MAX_HISTORY_MESSAGES=20
+MAX_MEMORY_CHARACTERS=4000
+MODEL_NAME=qwen2.5:7b
+OLLAMA_HOST=http://localhost:11434
+MAX_RETRIES=3
+GPU_ENABLED=true
+CPU_FALLBACK=true
+MAX_CONTEXT=8192
+TEMPERATURE=0
+
+========== 2. PROCESSOR FILE ==========
+const validator = require("../validators/meetingSchema");
+const normalizer = require("../utils/responseNormalizer");
+const retryHandler = require("../utils/retryHandler");
+
+const summaryExtractor = require("../extractors/summaryExtractor");
+const agendaExtractor = require("../extractors/agendaExtractor");
+const decisionExtractor = require("../extractors/decisionExtractor");
+const actionItemExtractor = require("../extractors/actionItemExtractor");
+const riskExtractor = require("../extractors/riskExtractor");
+const questionExtractor = require("../extractors/questionExtractor");
+const entityExtractor = require("../extractors/entityExtractor");
+const classifierExtractor = require("../extractors/classifierExtractor");
+const conversationIntelligenceExtractor = require("../extractors/conversationIntelligenceExtractor");
+
+class MeetingProcessor {
+    async analyze(transcript) {
+        console.log("Starting Modular Meeting Processor pipeline...");
+        const startTime = Date.now();
+
+        // Truncate to save context window and avoid OOM
+        const maxChars = parseInt(process.env.MAX_CONTEXT_CHARACTERS || process.env.MAX_CONTEXT || "24000", 10);
+        const processingTranscript = transcript.length > maxChars 
+            ? transcript.substring(0, maxChars) + "\n...[TRUNCATED]" 
+            : transcript;
+        console.log(`Transcript length: ${transcript.length} chars. Processing: ${processingTranscript.length} chars.`);
+
+        // Default empty structure
+        let finalJson = {
+            overview: "", summary: "", summaryPoints: [], agenda: [], discussionPoints: [],
+            decisions: [], actionItems: [], risks: [], questions: { answered: [], unanswered: [] },
+            keywords: [], people: [], organizations: [], technologies: [], meetingType: "", followUpRequired: false, followUpReason: "",
+            aiInsights: { sentiment: {}, emotion: {}, intent: "", meetingTone: "", engagement: {}, confidence: 0 }
+        };
+
+        const metrics = {
+            stages: [],
+            totalInferenceTime: 0,
+            totalValidationTime: 0,
+            normalizationTime: 0,
+            totalPipelineTime: 0
+        };
+
+        const runStage = async (name, extractor, validateFn, mergeFn) => {
+            const stageStart = Date.now();
+            let stageInferenceTime = 0;
+            let stageValidationTime = 0;
+            try {
+                const result = await retryHandler.withRetry(async () => {
+                    const infStart = Date.now();
+                    const data = await extractor.extract(processingTranscript);
+                    stageInferenceTime += (Date.now() - infStart);
+
+                    const valStart = Date.now();
+                    validateFn(data);
+                    stageValidationTime += (Date.now() - valStart);
+
+                    return data;
+                }, null, 2000); // maxAttempts = null (uses .env)
+                mergeFn(result);
+                const duration = Date.now() - stageStart;
+
+                metrics.totalInferenceTime += stageInferenceTime;
+                metrics.totalValidationTime += stageValidationTime;
+                metrics.stages.push({
+                    name,
+                    inferenceTime: stageInferenceTime,
+                    validationTime: stageValidationTime,
+                    totalTime: duration,
+                    status: 'Success'
+                });
+
+                console.log(`${name} âœ“ (${duration}ms)`);
+            } catch (error) {
+                const duration = Date.now() - stageStart;
+
+                metrics.totalInferenceTime += stageInferenceTime;
+                metrics.totalValidationTime += stageValidationTime;
+                metrics.stages.push({
+                    name,
+                    inferenceTime: stageInferenceTime,
+                    validationTime: stageValidationTime,
+                    totalTime: duration,
+                    status: 'Failed'
+                });
+
+                console.error(`âŒ Failed to extract ${name} after ${duration}ms:`, error.message);
+                // Fallback will use the default values initialized in finalJson
+            }
+        };
+
+        try {
+            // Parallel execution for better performance
+            await Promise.all([
+                runStage("Summary Extraction", summaryExtractor, (d) => validator.validateSummary(d, processingTranscript), (d) => {
+                    finalJson.overview = d.overview || ""; finalJson.summary = d.summary || ""; finalJson.summaryPoints = d.summaryPoints || [];
+                }),
+                runStage("Agenda Extraction", agendaExtractor, (d) => validator.validateAgenda(d, processingTranscript), (d) => {
+                    finalJson.agenda = d.agenda || []; finalJson.discussionPoints = d.discussionPoints || [];
+                }),
+                runStage("Decision Extraction", decisionExtractor, (d) => validator.validateDecisions(d, processingTranscript), (d) => {
+                    finalJson.decisions = d.decisions || [];
+                }),
+                runStage("Action Item Extraction", actionItemExtractor, (d) => validator.validateActionItems(d, processingTranscript), (d) => {
+                    finalJson.actionItems = d.actionItems || [];
+                }),
+                runStage("Risk Extraction", riskExtractor, (d) => validator.validateRisks(d, processingTranscript), (d) => {
+                    finalJson.risks = d.risks || [];
+                }),
+                runStage("Question Extraction", questionExtractor, (d) => validator.validateQuestions(d, processingTranscript), (d) => {
+                    finalJson.questions = d.questions || { answered: [], unanswered: [] };
+                }),
+                runStage("Entity Extraction", entityExtractor, (d) => validator.validateEntities(d), (d) => {
+                    finalJson.keywords = d.keywords || []; finalJson.people = d.people || []; finalJson.organizations = d.organizations || []; finalJson.technologies = d.technologies || [];
+                }),
+                runStage("Classifier", classifierExtractor, (d) => validator.validateClassifier(d), (d) => {
+                    finalJson.meetingType = d.meetingType || ""; finalJson.followUpRequired = d.followUpRequired || false; finalJson.followUpReason = d.followUpReason || "";
+                }),
+                runStage("Conversation Intelligence", conversationIntelligenceExtractor, (d) => validator.validateConversationIntelligence(d), (d) => {
+                    finalJson.aiInsights = d.aiInsights || { sentiment: {}, emotion: {}, intent: "", meetingTone: "", engagement: {}, confidence: 0 };
+                })
+            ]);
+
+            const normStart = Date.now();
+            console.log("Normalization âœ“");
+            const normalized = normalizer.normalize(finalJson);
+            metrics.normalizationTime = Date.now() - normStart;
+            
+            console.log("Validation âœ“");
+
+            const executionTime = Date.now() - startTime;
+            metrics.totalPipelineTime = executionTime;
+            console.log(`Pipeline Completed in ${executionTime}ms`);
+            console.log("Final JSON Saved âœ“");
+
+            console.log("\n==================================================");
+            console.log("           PIPELINE PERFORMANCE REPORT");
+            console.log("==================================================");
+            console.log(`Total Pipeline Time:   ${metrics.totalPipelineTime}ms`);
+            console.log(`Total Inference Time:  ${metrics.totalInferenceTime}ms`);
+            console.log(`Total Validation Time: ${metrics.totalValidationTime}ms`);
+            console.log(`Normalization Time:    ${metrics.normalizationTime}ms`);
+            console.log("--------------------------------------------------");
+            console.log("STAGE BREAKDOWN:");
+            metrics.stages.forEach(s => {
+                console.log(`- ${s.name}:`);
+                console.log(`    Status:     ${s.status}`);
+                console.log(`    Inference:  ${s.inferenceTime}ms`);
+                console.log(`    Validation: ${s.validationTime}ms`);
+                console.log(`    Total:      ${s.totalTime}ms`);
+            });
+            console.log("==================================================\n");
+
+            return normalized;
+        } catch (error) {
+            console.error("Meeting Processor Error");
+            console.error("Total Pipeline Execution Time before failure:", Date.now() - startTime, "ms");
+            throw error;
+        }
+    }
+}
+
+module.exports = new MeetingProcessor();
+
+========== 3. EXTRACTORS ==========
+
+----- actionItemExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract all action items (tasks) from the transcript.
+Only extract actual tasks. Identify the owner and the deadline if mentioned.
+Valid priorities: "High", "Medium", "Low".
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "actionItems": [
+    {
+      "task": "Specific task description",
+      "owner": "Name of person responsible",
+      "deadline": "When it is due",
+      "priority": "Medium",
+      "status": "Pending"
+    }
+  ]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class ActionItemExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new ActionItemExtractor();
+
+----- agendaExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract the agenda items and major discussion points from the transcript.
+Be specific and comprehensive. Do not use generic terms like "Team Updates".
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "agenda": ["Specific topic 1", "Specific topic 2"],
+  "discussionPoints": ["Detailed point 1", "Detailed point 2"]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class AgendaExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new AgendaExtractor();
+
+----- classifierExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Classify the meeting type and determine if a follow-up is required.
+Meeting types can be: Sprint Planning, Engineering Staff Meeting, Leadership Meeting, Project Review, Incident Review, Architecture Review, etc.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "meetingType": "Specific Meeting Type",
+  "followUpRequired": true,
+  "followUpReason": "Reason for follow-up, if any"
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class ClassifierExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new ClassifierExtractor();
+
+----- conversationIntelligenceExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Analyze the transcript to extract conversation intelligence insights.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "aiInsights": {
+    "sentiment": {
+      "overall": "Positive, Negative, or Neutral",
+      "score": 0.91
+    },
+    "emotion": {
+      "primary": "Primary emotion (e.g., Confident)",
+      "secondary": "Secondary emotion (e.g., Collaborative)"
+    },
+    "intent": "Meeting intent (e.g., Planning, Review, Brainstorming)",
+    "meetingTone": "Tone of the meeting (e.g., Professional, Casual)",
+    "engagement": {
+      "level": "High, Medium, or Low",
+      "score": 88
+    },
+    "confidence": 94
+  }
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class ConversationIntelligenceExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new ConversationIntelligenceExtractor();
+
+----- decisionExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract ONLY confirmed decisions explicitly stated in the transcript.
+
+A decision must represent a clear outcome or commitment that was actually agreed upon.
+
+Look for evidence such as:
+- "we decided"
+- "we agreed"
+- "approved"
+- "it was decided"
+- "let's go with"
+- "we will proceed with"
+- "confirmed"
+- "the final decision is"
+- clear acceptance or rejection followed by an outcome
+
+Do NOT extract:
+- questions
+- suggestions
+- possibilities
+- plans that were merely proposed
+- topics being discussed
+- routine statements
+- travel or location mentions unless clearly confirmed as a decision
+- information that cannot be supported directly by the transcript
+
+If there are no confirmed decisions, return an empty array.
+
+Return ONLY valid JSON in exactly this format:
+{
+  "decisions": []
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class DecisionExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript || "");
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new DecisionExtractor();
+
+----- entityExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract people, organizations, technologies, and keywords from the transcript.
+- people: Full names of participants or people mentioned.
+- organizations: Companies, vendors, partners, or departments mentioned.
+- technologies: Software, tools, technical concepts, or frameworks mentioned.
+- keywords: Meaningful, searchable keywords (avoid generic terms).
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "people": ["Person 1"],
+  "organizations": ["Org 1"],
+  "technologies": ["Tech 1"],
+  "keywords": ["Keyword 1"]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class EntityExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new EntityExtractor();
+
+----- questionExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract all questions asked during the meeting.
+Categorize them as "answered" if an answer was provided, or "unanswered" if no clear answer was given.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "questions": {
+    "answered": ["Answered question 1"],
+    "unanswered": ["Unanswered question 1"]
+  }
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class QuestionExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new QuestionExtractor();
+
+----- riskExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract ONLY genuine risks, blockers, unresolved concerns, or potential problems explicitly supported by the transcript.
+
+A risk must have evidence that it could negatively affect a project, decision, meeting outcome, schedule, resource, compliance, security, or other objective.
+
+Look for statements indicating:
+- a blocker
+- a potential failure
+- an unresolved problem
+- a threat or concern
+- a dependency that may cause problems
+- a delay or resource problem
+- security, compliance, technical, financial, or operational risk
+- uncertainty explicitly presented as a problem
+
+Do NOT extract:
+- normal questions
+- ordinary conversation
+- random statements
+- travel plans
+- locations
+- personal information
+- completed actions
+- suggestions unless explicitly described as a risk
+- vague or unrelated concerns
+- anything not supported by the transcript
+
+If there are no genuine risks, return an empty array.
+
+Return ONLY valid JSON in exactly this format:
+{
+  "risks": []
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class RiskExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript || "");
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new RiskExtractor();
+
+----- summaryExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract the overview, summary, and summary points from the transcript.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "overview": "One concise sentence describing the meeting.",
+  "summary": "A professional executive summary (100-200 words).",
+  "summaryPoints": ["Point 1", "Point 2"]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class SummaryExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new SummaryExtractor();
+
+========== 4. BENCHMARK FILE ==========
+/**
+ * Extraction Accuracy Benchmark
+ *
+ * Compares AI extraction output against manually annotated
+ * ground truth for multiple meetings.
+ *
+ * Benchmark only â€” does NOT modify production code.
+ */
+
+const path = require('path');
+const fs = require('fs');
+
+require('dotenv').config({
+  path: path.join(__dirname, '../.env'),
+});
+
+const mongoose = require('mongoose');
+const Meeting = require('../models/Meeting');
+
+const GROUND_TRUTH_FILES = [
+  path.join(
+    __dirname,
+    'data',
+    'extraction_ground_truth.json'
+  ),
+  path.join(
+    __dirname,
+    'data',
+    'extraction_ground_truth_sec_growth.json'
+  ),
+];
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+
+function normalize(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function similarity(a, b) {
+  const A = new Set(
+    normalize(a)
+      .split(' ')
+      .filter(Boolean)
+  );
+
+  const B = new Set(
+    normalize(b)
+      .split(' ')
+      .filter(Boolean)
+  );
+
+  if (!A.size || !B.size) return 0;
+
+  const intersection = [...A].filter((x) =>
+    B.has(x)
+  ).length;
+
+  const union = new Set([...A, ...B]).size;
+
+  return intersection / union;
+}
+
+function evaluate(predicted, expected, threshold = 0.5) {
+  const used = new Set();
+
+  let truePositive = 0;
+
+  for (const prediction of predicted) {
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    expected.forEach((truth, index) => {
+      if (used.has(index)) return;
+
+      const score = similarity(prediction, truth);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    });
+
+    if (
+      bestScore >= threshold &&
+      bestIndex !== -1
+    ) {
+      truePositive++;
+      used.add(bestIndex);
+    }
+  }
+
+  const falsePositive =
+    predicted.length - truePositive;
+
+  const falseNegative =
+    expected.length - truePositive;
+
+  const precision =
+    truePositive + falsePositive === 0
+      ? 0
+      : truePositive /
+        (truePositive + falsePositive);
+
+  const recall =
+    truePositive + falseNegative === 0
+      ? 0
+      : truePositive /
+        (truePositive + falseNegative);
+
+  const f1 =
+    precision + recall === 0
+      ? 0
+      : (2 * precision * recall) /
+        (precision + recall);
+
+  return {
+    truePositive,
+    falsePositive,
+    falseNegative,
+    precision: Number(
+      precision.toFixed(4)
+    ),
+    recall: Number(
+      recall.toFixed(4)
+    ),
+    f1: Number(
+      f1.toFixed(4)
+    ),
+  };
+}
+
+/**
+ * Aggregate raw TP / FP / FN across meetings.
+ *
+ * This produces micro-averaged metrics, which is
+ * appropriate when combining multiple benchmark samples.
+ */
+function aggregateMetrics(metricList) {
+  const truePositive = metricList.reduce(
+    (sum, m) => sum + m.truePositive,
+    0
+  );
+
+  const falsePositive = metricList.reduce(
+    (sum, m) => sum + m.falsePositive,
+    0
+  );
+
+  const falseNegative = metricList.reduce(
+    (sum, m) => sum + m.falseNegative,
+    0
+  );
+
+  const expected = truePositive + falseNegative;
+  const predicted = truePositive + falsePositive;
+
+  const precision =
+    predicted === 0
+      ? 0
+      : truePositive / predicted;
+
+  const recall =
+    expected === 0
+      ? 0
+      : truePositive / expected;
+
+  const f1 =
+    precision + recall === 0
+      ? 0
+      : (2 * precision * recall) /
+        (precision + recall);
+
+  return {
+    expected,
+    predicted,
+    truePositive,
+    falsePositive,
+    falseNegative,
+    precision: Number(
+      precision.toFixed(4)
+    ),
+    recall: Number(
+      recall.toFixed(4)
+    ),
+    f1: Number(
+      f1.toFixed(4)
+    ),
+  };
+}
+
+async function evaluateMeeting(
+  groundTruth
+) {
+  const meeting = await Meeting.findById(
+    groundTruth.meetingId
+  ).lean();
+
+  if (!meeting) {
+    throw new Error(
+      `Meeting not found: ${groundTruth.meetingId}`
+    );
+  }
+
+  const ai = meeting.aiAnalysis || {};
+
+  const predictedDecisions =
+    ai.decisions || [];
+
+  const predictedActions =
+    (ai.actionItems || []).map(
+      (item) => item.task || ''
+    );
+
+  const predictedRisks =
+    ai.risks || [];
+
+  const predictedQuestions =
+    (
+      ai.questions &&
+      ai.questions.unanswered
+    ) || [];
+
+  const decisionMetrics = evaluate(
+    predictedDecisions,
+    groundTruth.decisions
+  );
+
+  const actionMetrics = evaluate(
+    predictedActions,
+    groundTruth.actionItems.map(
+      (x) => x.task
+    )
+  );
+
+  const riskMetrics = evaluate(
+    predictedRisks,
+    groundTruth.risks
+  );
+
+  const questionMetrics = evaluate(
+    predictedQuestions,
+    groundTruth.questions.unanswered
+  );
+
+  return {
+    meeting: {
+      id: groundTruth.meetingId,
+      title: groundTruth.title,
+    },
+
+    results: {
+      decisions: {
+        expected:
+          groundTruth.decisions.length,
+        predicted:
+          predictedDecisions.length,
+        ...decisionMetrics,
+      },
+
+      actionItems: {
+        expected:
+          groundTruth.actionItems.length,
+        predicted:
+          predictedActions.length,
+        ...actionMetrics,
+      },
+
+      risks: {
+        expected:
+          groundTruth.risks.length,
+        predicted:
+          predictedRisks.length,
+        ...riskMetrics,
+      },
+
+      unansweredQuestions: {
+        expected:
+          groundTruth.questions.unanswered
+            .length,
+        predicted:
+          predictedQuestions.length,
+        ...questionMetrics,
+      },
+    },
+  };
+}
+
+async function main() {
+  console.log(
+    '============================================================'
+  );
+
+  console.log(
+    '       MULTI-MEETING EXTRACTION ACCURACY BENCHMARK'
+  );
+
+  console.log(
+    '============================================================'
+  );
+
+  console.log(
+    `Ground-truth datasets: ${GROUND_TRUTH_FILES.length}`
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Validate ground-truth files
+   * ----------------------------------------------------------
+   */
+
+  const groundTruths = [];
+
+  for (const file of GROUND_TRUTH_FILES) {
+    if (!fs.existsSync(file)) {
+      throw new Error(
+        `Ground truth file not found:\n${file}`
+      );
+    }
+
+    const data = JSON.parse(
+      fs.readFileSync(file, 'utf8')
+    );
+
+    groundTruths.push(data);
+
+    console.log(
+      `\nLoaded: ${path.basename(file)}`
+    );
+
+    console.log(
+      `  Meeting: ${data.title}`
+    );
+
+    console.log(
+      `  Decisions: ${data.decisions.length}`
+    );
+
+    console.log(
+      `  Action Items: ${data.actionItems.length}`
+    );
+
+    console.log(
+      `  Risks: ${data.risks.length}`
+    );
+
+    console.log(
+      `  Unanswered Questions: ${
+        data.questions.unanswered.length
+      }`
+    );
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Connect MongoDB
+   * ----------------------------------------------------------
+   */
+
+  await mongoose.connect(
+    process.env.MONGO_URI,
+    {
+      serverSelectionTimeoutMS: 5000,
+    }
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Evaluate every meeting
+   * ----------------------------------------------------------
+   */
+
+  const meetingResults = [];
+
+  for (const groundTruth of groundTruths) {
+    console.log(
+      `\nEvaluating: ${groundTruth.title}`
+    );
+
+    const result =
+      await evaluateMeeting(
+        groundTruth
+      );
+
+    meetingResults.push(result);
+
+    console.log(
+      JSON.stringify(
+        result.results,
+        null,
+        2
+      )
+    );
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Aggregate metrics by extraction category
+   * ----------------------------------------------------------
+   */
+
+  const overall = {
+    decisions: aggregateMetrics(
+      meetingResults.map(
+        (m) => m.results.decisions
+      )
+    ),
+
+    actionItems: aggregateMetrics(
+      meetingResults.map(
+        (m) => m.results.actionItems
+      )
+    ),
+
+    risks: aggregateMetrics(
+      meetingResults.map(
+        (m) => m.results.risks
+      )
+    ),
+
+    unansweredQuestions:
+      aggregateMetrics(
+        meetingResults.map(
+          (m) =>
+            m.results.unansweredQuestions
+        )
+      ),
+  };
+
+  /*
+   * ----------------------------------------------------------
+   * Macro average
+   *
+   * Average of the four category F1 scores.
+   * ----------------------------------------------------------
+   */
+
+  const macroPrecision =
+    (
+      overall.decisions.precision +
+      overall.actionItems.precision +
+      overall.risks.precision +
+      overall.unansweredQuestions.precision
+    ) / 4;
+
+  const macroRecall =
+    (
+      overall.decisions.recall +
+      overall.actionItems.recall +
+      overall.risks.recall +
+      overall.unansweredQuestions.recall
+    ) / 4;
+
+  const macroF1 =
+    (
+      overall.decisions.f1 +
+      overall.actionItems.f1 +
+      overall.risks.f1 +
+      overall.unansweredQuestions.f1
+    ) / 4;
+
+  /*
+   * ----------------------------------------------------------
+   * Final benchmark object
+   * ----------------------------------------------------------
+   */
+
+  const results = {
+    benchmark:
+      'multi_meeting_extraction_accuracy',
+
+    timestamp:
+      new Date().toISOString(),
+
+    datasetCount:
+      groundTruths.length,
+
+    meetings:
+      meetingResults,
+
+    overall: {
+      decisions:
+        overall.decisions,
+
+      actionItems:
+        overall.actionItems,
+
+      risks:
+        overall.risks,
+
+      unansweredQuestions:
+        overall.unansweredQuestions,
+
+      macroAverage: {
+        precision: Number(
+          macroPrecision.toFixed(4)
+        ),
+
+        recall: Number(
+          macroRecall.toFixed(4)
+        ),
+
+        f1: Number(
+          macroF1.toFixed(4)
+        ),
+      },
+    },
+
+    methodology: {
+      matching:
+        'Token Jaccard similarity',
+
+      similarityThreshold: 0.5,
+
+      averaging:
+        'Micro-average across meetings for each extraction category; macro-average across the four categories',
+
+      metrics: [
+        'Precision',
+        'Recall',
+        'F1',
+      ],
+
+      note:
+        'Ground truth was manually annotated from the meeting transcripts. Benchmark evaluates extraction quality only and does not modify production extraction code.',
+    },
+  };
+
+  /*
+   * ----------------------------------------------------------
+   * Save results
+   * ----------------------------------------------------------
+   */
+
+  fs.mkdirSync(
+    RESULTS_DIR,
+    { recursive: true }
+  );
+
+  const outputFile = path.join(
+    RESULTS_DIR,
+    'extraction_accuracy.json'
+  );
+
+  fs.writeFileSync(
+    outputFile,
+    JSON.stringify(
+      results,
+      null,
+      2
+    )
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Console summary
+   * ----------------------------------------------------------
+   */
+
+  console.log(
+    '\n============================================================'
+  );
+
+  console.log(
+    '                    FINAL RESULTS'
+  );
+
+  console.log(
+    '============================================================'
+  );
+
+  console.log(
+    JSON.stringify(
+      results.overall,
+      null,
+      2
+    )
+  );
+
+  console.log(
+    `\n[SAVED] ${outputFile}`
+  );
+
+  await mongoose.disconnect();
+}
+
+main().catch((error) => {
+  console.error(
+    '\nBenchmark failed:',
+    error
+  );
+
+  if (
+    mongoose.connection.readyState === 1
+  ) {
+    mongoose.disconnect();
+  }
+
+  process.exit(1);
+});
+
+========== 5. GROUND TRUTH FILES ==========
+
+----- extraction_ground_truth.json -----
+
+----- extraction_ground_truth_sec_growth.json -----
+
+========== 6. PACKAGE VERSIONS ==========
+{
+  "name": "meeting-intelligence-server",
+  "version": "1.0.0",
+  "description": "AI Meeting Intelligence System - Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@qdrant/js-client-rest": "^1.18.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.0",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.4",
+    "multer": "^2.2.0",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.3",
+    "ollama": "^0.6.3",
+    "uuid": "^14.0.1"
+  }
+}
+
+========== 7. RESULTS ==========
+{
+  "benchmark": "multi_meeting_extraction_accuracy",
+  "timestamp": "2026-10-06T05:39:14.155Z",
+  "datasetCount": 2,
+  "meetings": [
+    {
+      "meeting": {
+        "id": "6a6080b544f271a027b565fd",
+        "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 6,
+          "truePositive": 6,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "actionItems": {
+          "expected": 7,
+          "predicted": 7,
+          "truePositive": 6,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.8571,
+          "recall": 0.8571,
+          "f1": 0.8571
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 1,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1": 0.5
+        },
+        "unansweredQuestions": {
+          "expected": 1,
+          "predicted": 1,
+          "truePositive": 1,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    },
+    {
+      "meeting": {
+        "id": "6a608b2380c69cbd4caa84e0",
+        "title": "SICK - Secure and Govern Growth and Data Science Team Meeting"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 4,
+          "truePositive": 1,
+          "falsePositive": 3,
+          "falseNegative": 5,
+          "precision": 0.25,
+          "recall": 0.1667,
+          "f1": 0.2
+        },
+        "actionItems": {
+          "expected": 10,
+          "predicted": 9,
+          "truePositive": 6,
+          "falsePositive": 3,
+          "falseNegative": 4,
+          "precision": 0.6667,
+          "recall": 0.6,
+          "f1": 0.6316
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 0,
+          "falsePositive": 2,
+          "falseNegative": 2,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0
+        },
+        "unansweredQuestions": {
+          "expected": 3,
+          "predicted": 3,
+          "truePositive": 3,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    }
+  ],
+  "overall": {
+    "decisions": {
+      "expected": 12,
+      "predicted": 10,
+      "truePositive": 7,
+      "falsePositive": 3,
+      "falseNegative": 5,
+      "precision": 0.7,
+      "recall": 0.5833,
+      "f1": 0.6364
+    },
+    "actionItems": {
+      "expected": 17,
+      "predicted": 16,
+      "truePositive": 12,
+      "falsePositive": 4,
+      "falseNegative": 5,
+      "precision": 0.75,
+      "recall": 0.7059,
+      "f1": 0.7273
+    },
+    "risks": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 1,
+      "falsePositive": 3,
+      "falseNegative": 3,
+      "precision": 0.25,
+      "recall": 0.25,
+      "f1": 0.25
+    },
+    "unansweredQuestions": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 4,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "macroAverage": {
+      "precision": 0.675,
+      "recall": 0.6348,
+      "f1": 0.6534
+    }
+  },
+  "methodology": {
+    "matching": "Token Jaccard similarity",
+    "similarityThreshold": 0.5,
+    "averaging": "Micro-average across meetings for each extraction category; macro-average across the four categories",
+    "metrics": [
+      "Precision",
+      "Recall",
+      "F1"
+    ],
+    "note": "Ground truth was manually annotated from the meeting transcripts. Benchmark evaluates extraction quality only and does not modify production extraction code."
+  }
+}
+
+============================================================
+END OF SYSTEM DUMP
+============================================================

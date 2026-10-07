@@ -1,0 +1,25 @@
+{
+  "description": "Ground-truth retrieval eval label file - MANUALLY COMPLETE THIS FILE",
+  "created": "2026-08-19T18:49:29.851Z",
+  "instructions": [
+    "Write 50 realistic questions that a meeting participant might ask.",
+    "For each query, list the meeting IDs (and optionally chunk IDs) that contain the answer.",
+    "Use only the 3 meetings present in MongoDB.",
+    "Relevant = the answer is contained in that meeting document."
+  ],
+  "meetings": [
+    {
+      "id": "6a858288ccc5a9004c310f2e",
+      "title": "Tamil audio (265s, 742 words)"
+    },
+    {
+      "id": "6a608b2380c69cbd4caa84e0",
+      "title": "Sec Growth DataScience (1743s, 4647 words)"
+    },
+    {
+      "id": "6a6080b544f271a027b565fd",
+      "title": "Effective Meetings Simulated Exercise (849s, 2598 words)"
+    }
+  ],
+  "queries": []
+}

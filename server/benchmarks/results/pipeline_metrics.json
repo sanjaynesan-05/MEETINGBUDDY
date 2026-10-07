@@ -1,0 +1,128 @@
+{
+  "benchmark": "pipeline_performance",
+  "timestamp": "2026-08-19T18:34:57.262Z",
+  "hardware": {
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+    "ramGB": 16,
+    "os": "Windows 11",
+    "node": "v22.14.0"
+  },
+  "availableData": {
+    "meetings": 3,
+    "completedMeetings": 3
+  },
+  "metrics": {
+    "audioDuration": {
+      "status": "MEASURED",
+      "source": "Meeting.duration (from transcription output)",
+      "values_seconds": [
+        849.61,
+        1743.47,
+        265.31
+      ],
+      "mean_s": 952.8,
+      "min_s": 265.31,
+      "max_s": 1743.47
+    },
+    "transcriptionTime": {
+      "status": "NOT_MEASURED",
+      "reason": "transcriptionCompletedAt timestamps stored, but processing start time not stored in DB.",
+      "actualTickData": [
+        {
+          "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+          "transcriptionCompletedAt": "2026-07-22T08:42:33.555Z",
+          "createdAt": "2026-07-22T08:35:01.478Z"
+        },
+        {
+          "title": "Sec Growth DataScience",
+          "transcriptionCompletedAt": "2026-07-22T09:36:55.609Z",
+          "createdAt": "2026-07-22T09:19:31.418Z"
+        },
+        {
+          "title": "Tamil audio",
+          "transcriptionCompletedAt": "2026-08-19T10:20:35.085Z",
+          "createdAt": "2026-08-19T10:16:41.018Z"
+        }
+      ]
+    },
+    "diarization": {
+      "status": "NOT_MEASURED",
+      "reason": "Diarization time is not recorded as a separate stage in stored data.",
+      "meetingsWithSpeakers": 0
+    },
+    "llmExtractionTimes": {
+      "status": "NOT_MEASURED_FROM_STORED_DATA",
+      "reason": "meeting.processor.js logs stage timings to console but does not persist them. Run run-extraction-benchmark.js for live measurements."
+    },
+    "embeddingChunks": {
+      "status": "MEASURED",
+      "totalChunks": 96,
+      "perMeeting": [
+        {
+          "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+          "meetingId": "6a6080b544f271a027b565fd",
+          "chunks": 31
+        },
+        {
+          "title": "Sec Growth DataScience",
+          "meetingId": "6a608b2380c69cbd4caa84e0",
+          "chunks": 57
+        },
+        {
+          "title": "Tamil audio",
+          "meetingId": "6a858288ccc5a9004c310f2e",
+          "chunks": 8
+        }
+      ],
+      "embeddingModel": "nomic-embed-text (768-dim, ollama)",
+      "note": "Generation time per chunk was logged at processing time but not persisted. Re-run embedding benchmark for live timing."
+    },
+    "retrievalLatency": {
+      "status": "MEASURED",
+      "type": "keyword_search",
+      "runs": [
+        {
+          "query": "deploy",
+          "executionTimeMs": 57,
+          "returned": 0,
+          "total": 0
+        },
+        {
+          "query": "security",
+          "executionTimeMs": 43,
+          "returned": 2,
+          "total": 2
+        },
+        {
+          "query": "meeting",
+          "executionTimeMs": 34,
+          "returned": 3,
+          "total": 3
+        },
+        {
+          "query": "project",
+          "executionTimeMs": 27,
+          "returned": 2,
+          "total": 2
+        },
+        {
+          "query": "decision",
+          "executionTimeMs": 21,
+          "returned": 2,
+          "total": 2
+        }
+      ],
+      "note": "Latency includes Mongo aggregation + snippet generation."
+    },
+    "ragGenerationTime": {
+      "status": "NOT_MEASURED_IN_THIS_RUN",
+      "reason": "Requires live Ollama call with RAG pipeline. Use run-rag-benchmark.js for live measurement."
+    },
+    "endToEnd": {
+      "status": "PARTIALLY_MEASURED",
+      "note": "Completion status available, but per-stage timestamps not persisted.",
+      "completedMeetings": 3
+    }
+  }
+}

@@ -1,0 +1,528 @@
+{
+  "benchmark": "transcript_grounding_evaluation",
+  "timestamp": "2026-08-19T18:50:24.400Z",
+  "implementation": {
+    "file": "server/services/ai/validators/meetingSchema.js",
+    "method": "verifySemanticMatch",
+    "threshold": 0.2,
+    "behavior": "LOGS FAILURES BUT KEEPS ITEMS — \"Kept to prevent data loss\". No items are ever rejected at runtime."
+  },
+  "meetings": [
+    {
+      "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+      "meetingId": "6a6080b544f271a027b565fd",
+      "decisions": {
+        "total": 6,
+        "grounded": 6,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Send an email advising staff about priority parking",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "Allocate two car parking spaces to Sue and Jason",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 4
+          },
+          {
+            "text": "Put up a sign with Jason's name on it indicating his parking space",
+            "matchRatio": 0.7143,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 7
+          },
+          {
+            "text": "Hold a meeting between Rita and Sue to discuss low staff morale issues",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Run the training idea past Clive before the next meeting",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "Have an effective communication skills course for Frank",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 6
+          }
+        ]
+      },
+      "actionItems": {
+        "total": 7,
+        "grounded": 7,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Send an email to all staff advising them about priority parking",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Put up signs in the car park indicating priority spaces",
+            "matchRatio": 0.6,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 5
+          },
+          {
+            "text": "Hold a meeting with Sue and Julian to discuss staff morale issues",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Run the idea of training for IT issues past Clive",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 5
+          },
+          {
+            "text": "Create and send out a questionnaire to staff about issues affecting morale",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 8
+          },
+          {
+            "text": "Address the financial report discrepancies with Gary Cope's input",
+            "matchRatio": 0.625,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 8
+          },
+          {
+            "text": "Schedule a cleaning task for the next meeting to address cleanliness issues in the kitchen and shower room",
+            "matchRatio": 0.8182,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 11
+          }
+        ]
+      },
+      "risks": {
+        "total": 2,
+        "grounded": 2,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "There is a growing concern about low staff morale in certain departments.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "There have been arguments and fights over car parking spaces due to the new office layout.",
+            "matchRatio": 0.9,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 10
+          }
+        ]
+      },
+      "answeredQuestions": {
+        "total": 5,
+        "grounded": 5,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Are you saying there is a problem with car parking?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 5
+          },
+          {
+            "text": "What happens if one of them is off-sick?",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 4
+          },
+          {
+            "text": "Is there one thing about that?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 4
+          },
+          {
+            "text": "What do you think?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          },
+          {
+            "text": "Can I just say... There's a little bit in there.",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 4
+          }
+        ]
+      },
+      "unansweredQuestions": {
+        "total": 1,
+        "grounded": 1,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "What are the IT issues?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          }
+        ]
+      }
+    },
+    {
+      "title": "Sec Growth DataScience",
+      "meetingId": "6a608b2380c69cbd4caa84e0",
+      "decisions": {
+        "total": 4,
+        "grounded": 4,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Allen has been appointed as acting full-stack manager for security policies.",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 8
+          },
+          {
+            "text": "The anti-abuse stage within the data science section is being renamed to simply 'data science', with plans to potentially split it into two groups in the future.",
+            "matchRatio": 0.7222,
+            "matched": true,
+            "matchedWords": 13,
+            "totalWords": 18
+          },
+          {
+            "text": "A second team will be established within dynamic analysis, and Thomas will serve as a team factor for this new team.",
+            "matchRatio": 0.8571,
+            "matched": true,
+            "matchedWords": 12,
+            "totalWords": 14
+          },
+          {
+            "text": "The name of the secure growth and data science team may be changed to 'enrichment' but no final decision has been made.",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 12
+          }
+        ]
+      },
+      "actionItems": {
+        "total": 9,
+        "grounded": 9,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Compile and report on team allocations, error budgets, and reliability and security incidents.",
+            "matchRatio": 0.8889,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 9
+          },
+          {
+            "text": "Set up a bot for container security that weekly pings the team to volunteer for data resource.",
+            "matchRatio": 0.8889,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 9
+          },
+          {
+            "text": "Enable the threat insights bot.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "Report back on interview refinement by the end of the quarter.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 5
+          },
+          {
+            "text": "Brainstorm and discuss options for handling security findings related to commercial versions of analyzer specifically regarding deviation requests and bulk fixes.",
+            "matchRatio": 0.8125,
+            "matched": true,
+            "matchedWords": 13,
+            "totalWords": 16
+          },
+          {
+            "text": "Rename the team name from 'Secure Growth and Data Science' to a one-word name like 'Enrichment'.",
+            "matchRatio": 0.9167,
+            "matched": true,
+            "matchedWords": 11,
+            "totalWords": 12
+          },
+          {
+            "text": "Add announcements of work anniversaries and new hires to the meeting template.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 6
+          },
+          {
+            "text": "Provide feedback on the development vision, mission, and direction.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 6
+          },
+          {
+            "text": "Add maintainers to individual team member yamato files in the handbook for projects that require it.",
+            "matchRatio": 0.9,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 10
+          }
+        ]
+      },
+      "risks": {
+        "total": 2,
+        "grounded": 0,
+        "unsupported": 2,
+        "items": [
+          {
+            "text": "Risk 1",
+            "matchRatio": 0,
+            "matched": false,
+            "matchedWords": 0,
+            "totalWords": 1
+          },
+          {
+            "text": "Risk 2",
+            "matchRatio": 0,
+            "matched": false,
+            "matchedWords": 0,
+            "totalWords": 1
+          }
+        ]
+      },
+      "answeredQuestions": {
+        "total": 3,
+        "grounded": 3,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "What are you going to call your new team or how will you differentiate?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "Can folks check with their teams to see if the approvals are affecting them?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Do you have any thoughts on renaming the team to 'enrichment'?",
+            "matchRatio": 0.8,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 5
+          }
+        ]
+      },
+      "unansweredQuestions": {
+        "total": 3,
+        "grounded": 3,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Why are you here when it's midnight?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "How do you plan to improve the signal and noise ratio in your communications?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "What is the story behind what's going on with reliability or security incidents?",
+            "matchRatio": 0.8889,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 9
+          }
+        ]
+      }
+    },
+    {
+      "title": "Tamil audio",
+      "meetingId": "6a858288ccc5a9004c310f2e",
+      "decisions": {
+        "total": 0,
+        "grounded": 0,
+        "unsupported": 0,
+        "items": []
+      },
+      "actionItems": {
+        "total": 1,
+        "grounded": 1,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Go to a conference in Bangalore",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          }
+        ]
+      },
+      "risks": {
+        "total": 0,
+        "grounded": 0,
+        "unsupported": 0,
+        "items": []
+      },
+      "answeredQuestions": {
+        "total": 0,
+        "grounded": 0,
+        "unsupported": 0,
+        "items": []
+      },
+      "unansweredQuestions": {
+        "total": 8,
+        "grounded": 7,
+        "unsupported": 1,
+        "items": [
+          {
+            "text": "What is Mr. Vetham?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          },
+          {
+            "text": "Where are you?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 1,
+            "totalWords": 1
+          },
+          {
+            "text": "Who might come back?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "Why are you trying to figure out anything wrong?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 4
+          },
+          {
+            "text": "Why do you want to come to watch?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "What's up?",
+            "matchRatio": 0,
+            "matched": false,
+            "matchedWords": 0,
+            "totalWords": 1
+          },
+          {
+            "text": "Where are you going to Bangalore?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "What is the new program?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          }
+        ]
+      }
+    }
+  ],
+  "totals": {
+    "decisions": {
+      "total": 10,
+      "grounded": 10,
+      "unsupported": 0,
+      "rate": 0
+    },
+    "actionItems": {
+      "total": 17,
+      "grounded": 17,
+      "unsupported": 0,
+      "rate": 0
+    },
+    "risks": {
+      "total": 4,
+      "grounded": 2,
+      "unsupported": 2,
+      "rate": 50
+    },
+    "answeredQuestions": {
+      "total": 8,
+      "grounded": 8,
+      "unsupported": 0,
+      "rate": 0
+    },
+    "unansweredQuestions": {
+      "total": 12,
+      "grounded": 11,
+      "unsupported": 1,
+      "rate": 8.33
+    }
+  },
+  "aggregate": {
+    "meetings": 3,
+    "totalExtractedItems": 51,
+    "totalUnsupportedItems": 3,
+    "totalGroundedItems": 48,
+    "overallUnsupportedRatePercent": 5.88
+  },
+  "notes": {
+    "falseRejectionRate": "NOT MEASURABLE - requires independently verified ground truth",
+    "hallucinationAccuracy": "This is NOT an accuracy metric. The 20% threshold is a lexical-overlap heuristic, not a validated measure of hallucination.",
+    "rejectionBehavior": "The implementation never removes items flagged as unsupported. All 3 flagged items were KEPT in the final output.",
+    "keyObservation": "The 20% threshold verified in code matches the paper claim. However, because the implementation only logs (never rejects), it cannot reduce false positives; it only serves as an audit signal."
+  }
+}

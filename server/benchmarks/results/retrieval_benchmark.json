@@ -1,0 +1,7 @@
+{
+  "benchmark": "retrieval_evaluation",
+  "timestamp": "2026-08-19T18:57:49.611Z",
+  "status": "NOT_MEASURED",
+  "reason": "Ground-truth label file exists but contains 0 labeled queries (template only). Manual labeling required.",
+  "benchmarkSpecFile": "D:\\final year project\\server\\benchmarks\\data\\retrieval_ground_truth.json"
+}

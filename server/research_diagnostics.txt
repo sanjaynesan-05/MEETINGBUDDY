@@ -1,0 +1,5148 @@
+﻿========== 1. ENV CONFIG ==========
+MAX_FILE_SIZE=104857600
+WHISPER_MODEL=large-v3-turbo
+# Production model guard; set true ONLY for development/testing
+STT_ALLOW_DEV_MODELS=false
+QUALITY_GATE_RETRY=40
+QUALITY_GATE_MAX_HALLUCINATION_RATE=0.30
+QUALITY_GATE_MAX_REPETITION_RATE=0.45
+# Retry engine
+STT_MAX_RETRIES=2
+STT_RETRY_DELAY_MS=2000
+# Ollama Embedding Configuration
+OLLAMA_URL=http://localhost:11434
+EMBEDDING_MODEL=nomic-embed-text
+RETRIEVAL_MAX_CONTEXT_CHUNKS=5
+RETRIEVAL_MAX_CONTEXT_CHARACTERS=10000
+MAX_PROMPT_CHARACTERS=32000
+MAX_CONTEXT_CHARACTERS=24000
+MAX_SYSTEM_PROMPT=4000
+MAX_USER_PROMPT=4000
+OLLAMA_MODEL=qwen2.5:7b
+MAX_RESPONSE_TOKENS=1024
+GENERATION_TEMPERATURE=0.3
+CHAT_MAX_QUESTION_LENGTH=1000
+MAX_HISTORY_MESSAGES=20
+MAX_MEMORY_CHARACTERS=4000
+MODEL_NAME=qwen2.5:7b
+OLLAMA_HOST=http://localhost:11434
+MAX_RETRIES=3
+GPU_ENABLED=true
+CPU_FALLBACK=true
+MAX_CONTEXT=8192
+TEMPERATURE=0
+
+
+========== 2. PROCESSOR FILE ==========
+const validator = require("../validators/meetingSchema");
+const normalizer = require("../utils/responseNormalizer");
+const retryHandler = require("../utils/retryHandler");
+
+const summaryExtractor = require("../extractors/summaryExtractor");
+const agendaExtractor = require("../extractors/agendaExtractor");
+const decisionExtractor = require("../extractors/decisionExtractor");
+const actionItemExtractor = require("../extractors/actionItemExtractor");
+const riskExtractor = require("../extractors/riskExtractor");
+const questionExtractor = require("../extractors/questionExtractor");
+const entityExtractor = require("../extractors/entityExtractor");
+const classifierExtractor = require("../extractors/classifierExtractor");
+const conversationIntelligenceExtractor = require("../extractors/conversationIntelligenceExtractor");
+
+class MeetingProcessor {
+    async analyze(transcript) {
+        console.log("Starting Modular Meeting Processor pipeline...");
+        const startTime = Date.now();
+
+        // Truncate to save context window and avoid OOM
+        const maxChars = parseInt(process.env.MAX_CONTEXT_CHARACTERS || process.env.MAX_CONTEXT || "24000", 10);
+        const processingTranscript = transcript.length > maxChars 
+            ? transcript.substring(0, maxChars) + "\n...[TRUNCATED]" 
+            : transcript;
+        console.log(`Transcript length: ${transcript.length} chars. Processing: ${processingTranscript.length} chars.`);
+
+        // Default empty structure
+        let finalJson = {
+            overview: "", summary: "", summaryPoints: [], agenda: [], discussionPoints: [],
+            decisions: [], actionItems: [], risks: [], questions: { answered: [], unanswered: [] },
+            keywords: [], people: [], organizations: [], technologies: [], meetingType: "", followUpRequired: false, followUpReason: "",
+            aiInsights: { sentiment: {}, emotion: {}, intent: "", meetingTone: "", engagement: {}, confidence: 0 }
+        };
+
+        const metrics = {
+            stages: [],
+            totalInferenceTime: 0,
+            totalValidationTime: 0,
+            normalizationTime: 0,
+            totalPipelineTime: 0
+        };
+
+        const runStage = async (name, extractor, validateFn, mergeFn) => {
+            const stageStart = Date.now();
+            let stageInferenceTime = 0;
+            let stageValidationTime = 0;
+            try {
+                const result = await retryHandler.withRetry(async () => {
+                    const infStart = Date.now();
+                    const data = await extractor.extract(processingTranscript);
+                    stageInferenceTime += (Date.now() - infStart);
+
+                    const valStart = Date.now();
+                    validateFn(data);
+                    stageValidationTime += (Date.now() - valStart);
+
+                    return data;
+                }, null, 2000); // maxAttempts = null (uses .env)
+                mergeFn(result);
+                const duration = Date.now() - stageStart;
+
+                metrics.totalInferenceTime += stageInferenceTime;
+                metrics.totalValidationTime += stageValidationTime;
+                metrics.stages.push({
+                    name,
+                    inferenceTime: stageInferenceTime,
+                    validationTime: stageValidationTime,
+                    totalTime: duration,
+                    status: 'Success'
+                });
+
+                console.log(`${name} âœ“ (${duration}ms)`);
+            } catch (error) {
+                const duration = Date.now() - stageStart;
+
+                metrics.totalInferenceTime += stageInferenceTime;
+                metrics.totalValidationTime += stageValidationTime;
+                metrics.stages.push({
+                    name,
+                    inferenceTime: stageInferenceTime,
+                    validationTime: stageValidationTime,
+                    totalTime: duration,
+                    status: 'Failed'
+                });
+
+                console.error(`âŒ Failed to extract ${name} after ${duration}ms:`, error.message);
+                // Fallback will use the default values initialized in finalJson
+            }
+        };
+
+        try {
+            // Parallel execution for better performance
+            await Promise.all([
+                runStage("Summary Extraction", summaryExtractor, (d) => validator.validateSummary(d, processingTranscript), (d) => {
+                    finalJson.overview = d.overview || ""; finalJson.summary = d.summary || ""; finalJson.summaryPoints = d.summaryPoints || [];
+                }),
+                runStage("Agenda Extraction", agendaExtractor, (d) => validator.validateAgenda(d, processingTranscript), (d) => {
+                    finalJson.agenda = d.agenda || []; finalJson.discussionPoints = d.discussionPoints || [];
+                }),
+                runStage("Decision Extraction", decisionExtractor, (d) => validator.validateDecisions(d, processingTranscript), (d) => {
+                    finalJson.decisions = d.decisions || [];
+                }),
+                runStage("Action Item Extraction", actionItemExtractor, (d) => validator.validateActionItems(d, processingTranscript), (d) => {
+                    finalJson.actionItems = d.actionItems || [];
+                }),
+                runStage("Risk Extraction", riskExtractor, (d) => validator.validateRisks(d, processingTranscript), (d) => {
+                    finalJson.risks = d.risks || [];
+                }),
+                runStage("Question Extraction", questionExtractor, (d) => validator.validateQuestions(d, processingTranscript), (d) => {
+                    finalJson.questions = d.questions || { answered: [], unanswered: [] };
+                }),
+                runStage("Entity Extraction", entityExtractor, (d) => validator.validateEntities(d), (d) => {
+                    finalJson.keywords = d.keywords || []; finalJson.people = d.people || []; finalJson.organizations = d.organizations || []; finalJson.technologies = d.technologies || [];
+                }),
+                runStage("Classifier", classifierExtractor, (d) => validator.validateClassifier(d), (d) => {
+                    finalJson.meetingType = d.meetingType || ""; finalJson.followUpRequired = d.followUpRequired || false; finalJson.followUpReason = d.followUpReason || "";
+                }),
+                runStage("Conversation Intelligence", conversationIntelligenceExtractor, (d) => validator.validateConversationIntelligence(d), (d) => {
+                    finalJson.aiInsights = d.aiInsights || { sentiment: {}, emotion: {}, intent: "", meetingTone: "", engagement: {}, confidence: 0 };
+                })
+            ]);
+
+            const normStart = Date.now();
+            console.log("Normalization âœ“");
+            const normalized = normalizer.normalize(finalJson);
+            metrics.normalizationTime = Date.now() - normStart;
+            
+            console.log("Validation âœ“");
+
+            const executionTime = Date.now() - startTime;
+            metrics.totalPipelineTime = executionTime;
+            console.log(`Pipeline Completed in ${executionTime}ms`);
+            console.log("Final JSON Saved âœ“");
+
+            console.log("\n==================================================");
+            console.log("           PIPELINE PERFORMANCE REPORT");
+            console.log("==================================================");
+            console.log(`Total Pipeline Time:   ${metrics.totalPipelineTime}ms`);
+            console.log(`Total Inference Time:  ${metrics.totalInferenceTime}ms`);
+            console.log(`Total Validation Time: ${metrics.totalValidationTime}ms`);
+            console.log(`Normalization Time:    ${metrics.normalizationTime}ms`);
+            console.log("--------------------------------------------------");
+            console.log("STAGE BREAKDOWN:");
+            metrics.stages.forEach(s => {
+                console.log(`- ${s.name}:`);
+                console.log(`    Status:     ${s.status}`);
+                console.log(`    Inference:  ${s.inferenceTime}ms`);
+                console.log(`    Validation: ${s.validationTime}ms`);
+                console.log(`    Total:      ${s.totalTime}ms`);
+            });
+            console.log("==================================================\n");
+
+            return normalized;
+        } catch (error) {
+            console.error("Meeting Processor Error");
+            console.error("Total Pipeline Execution Time before failure:", Date.now() - startTime, "ms");
+            throw error;
+        }
+    }
+}
+
+module.exports = new MeetingProcessor();
+
+
+========== 3. OLLAMA SERVICE ==========
+const { default: ollama } = require("ollama");
+
+class OllamaService {
+    constructor() {
+        this.model = process.env.MODEL_NAME || process.env.OLLAMA_MODEL || "qwen2.5:7b";
+        this.baseUrl = process.env.OLLAMA_HOST || process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+        this.gpuEnabled = process.env.GPU_ENABLED !== "false";
+        this.cpuFallback = process.env.CPU_FALLBACK !== "false";
+
+        this.defaultOptions = {
+            temperature: parseFloat(process.env.TEMPERATURE || "0"),
+            num_ctx: parseInt(process.env.MAX_CONTEXT || "8192", 10),
+            format: "json",
+        };
+        if (!this.gpuEnabled) {
+            this.defaultOptions.num_gpu = 0;
+        }
+    }
+
+    async checkModelAvailability() {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/tags`);
+            if (!response.ok) {
+                throw new Error("Ollama server is not responding correctly.");
+            }
+            const data = await response.json();
+            const models = data.models || [];
+            const modelExists = models.some((m) => m.name === this.model || m.name === `${this.model}:latest`);
+            
+            if (!modelExists) {
+                const installedModels = models.map(m => m.name).join(", ");
+                throw new Error(`\nConfigured model:\n${this.model}\n\nInstalled models:\n${installedModels || "None"}\n\nSuggested fix:\nollama pull ${this.model}`);
+            }
+        } catch (error) {
+            if (error.cause && error.cause.code === 'ECONNREFUSED' || (error.message && error.message.includes('fetch failed'))) {
+                throw new Error("Ollama server is unreachable. Is Ollama running?");
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Generic chat method
+     * @param {string} prompt
+     * @param {Object} options - Override default Ollama options
+     * @returns {Promise<string>}
+     */
+    async chat(prompt, options = {}) {
+        await this.checkModelAvailability();
+        const currentOptions = {
+            ...this.defaultOptions,
+            ...options,
+        };
+
+        const executeInference = async (opts) => {
+            const start = Date.now();
+            const response = await ollama.chat({
+                model: this.model,
+                format: currentOptions.format,
+                options: opts,
+                messages: [{ role: "user", content: prompt }],
+            });
+            const duration = Date.now() - start;
+            console.log(`[Ollama] Inference completed in ${duration}ms using ${opts.num_gpu === 0 ? 'CPU' : 'GPU (default)'}`);
+
+            if (!response || !response.message || typeof response.message.content !== "string") {
+                throw new Error("Invalid response received from Ollama.");
+            }
+            return response.message.content.trim();
+        };
+
+        try {
+            return await executeInference(currentOptions);
+        } catch (error) {
+            const errorMsg = error.message ? error.message.toLowerCase() : "";
+            
+            // Check for CUDA / Out of Memory errors
+            if (this.cpuFallback && (errorMsg.includes("cuda") || errorMsg.includes("out of memory") || errorMsg.includes("tensor"))) {
+                console.warn(`âš ï¸ [Ollama] GPU Inference Failed: ${error.message}`);
+                console.warn("âš ï¸ [Ollama] Automatically falling back to CPU (num_gpu: 0)...");
+                
+                try {
+                    const cpuOptions = { ...currentOptions, num_gpu: 0 };
+                    return await executeInference(cpuOptions);
+                } catch (cpuError) {
+                    console.error("âŒ [Ollama] CPU Fallback Inference Failed:", cpuError.message);
+                    throw cpuError;
+                }
+            }
+
+            console.error("======================================");
+            console.error("âŒ Ollama Service Error");
+            console.error("Model:", this.model);
+            console.error("Message:", error.message);
+            console.error("======================================");
+
+            throw error;
+        }
+    }
+    /**
+     * Meeting summarization
+     */
+    async summarizeMeeting(transcript) {
+        return this.chat(transcript);
+    }
+    /**
+     * Meeting intelligence extraction
+     */
+    async analyzeMeeting(transcript) {
+        return this.chat(transcript, {
+            temperature: 0,
+        });
+    }
+    /**
+     * Generic Q&A
+     */
+    async ask(question) {
+        return this.chat(question, {
+            format: undefined,
+        });
+    }
+}
+
+module.exports = new OllamaService();
+
+
+========== 4. EXTRACTORS ==========
+----- actionItemExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract all action items (tasks) from the transcript.
+Only extract actual tasks. Identify the owner and the deadline if mentioned.
+Valid priorities: "High", "Medium", "Low".
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "actionItems": [
+    {
+      "task": "Specific task description",
+      "owner": "Name of person responsible",
+      "deadline": "When it is due",
+      "priority": "Medium",
+      "status": "Pending"
+    }
+  ]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class ActionItemExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new ActionItemExtractor();
+
+----- agendaExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract the agenda items and major discussion points from the transcript.
+Be specific and comprehensive. Do not use generic terms like "Team Updates".
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "agenda": ["Specific topic 1", "Specific topic 2"],
+  "discussionPoints": ["Detailed point 1", "Detailed point 2"]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class AgendaExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new AgendaExtractor();
+
+----- classifierExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Classify the meeting type and determine if a follow-up is required.
+Meeting types can be: Sprint Planning, Engineering Staff Meeting, Leadership Meeting, Project Review, Incident Review, Architecture Review, etc.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "meetingType": "Specific Meeting Type",
+  "followUpRequired": true,
+  "followUpReason": "Reason for follow-up, if any"
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class ClassifierExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new ClassifierExtractor();
+
+----- conversationIntelligenceExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Analyze the transcript to extract conversation intelligence insights.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "aiInsights": {
+    "sentiment": {
+      "overall": "Positive, Negative, or Neutral",
+      "score": 0.91
+    },
+    "emotion": {
+      "primary": "Primary emotion (e.g., Confident)",
+      "secondary": "Secondary emotion (e.g., Collaborative)"
+    },
+    "intent": "Meeting intent (e.g., Planning, Review, Brainstorming)",
+    "meetingTone": "Tone of the meeting (e.g., Professional, Casual)",
+    "engagement": {
+      "level": "High, Medium, or Low",
+      "score": 88
+    },
+    "confidence": 94
+  }
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class ConversationIntelligenceExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new ConversationIntelligenceExtractor();
+
+----- decisionExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract ONLY confirmed decisions explicitly stated in the transcript.
+
+A decision must represent a clear outcome or commitment that was actually agreed upon.
+
+Look for evidence such as:
+- "we decided"
+- "we agreed"
+- "approved"
+- "it was decided"
+- "let's go with"
+- "we will proceed with"
+- "confirmed"
+- "the final decision is"
+- clear acceptance or rejection followed by an outcome
+
+Do NOT extract:
+- questions
+- suggestions
+- possibilities
+- plans that were merely proposed
+- topics being discussed
+- routine statements
+- travel or location mentions unless clearly confirmed as a decision
+- information that cannot be supported directly by the transcript
+
+If there are no confirmed decisions, return an empty array.
+
+Return ONLY valid JSON in exactly this format:
+{
+  "decisions": []
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class DecisionExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript || "");
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new DecisionExtractor();
+
+----- entityExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract people, organizations, technologies, and keywords from the transcript.
+- people: Full names of participants or people mentioned.
+- organizations: Companies, vendors, partners, or departments mentioned.
+- technologies: Software, tools, technical concepts, or frameworks mentioned.
+- keywords: Meaningful, searchable keywords (avoid generic terms).
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "people": ["Person 1"],
+  "organizations": ["Org 1"],
+  "technologies": ["Tech 1"],
+  "keywords": ["Keyword 1"]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class EntityExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new EntityExtractor();
+
+----- questionExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract all questions asked during the meeting.
+Categorize them as "answered" if an answer was provided, or "unanswered" if no clear answer was given.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "questions": {
+    "answered": ["Answered question 1"],
+    "unanswered": ["Unanswered question 1"]
+  }
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class QuestionExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new QuestionExtractor();
+
+----- riskExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract ONLY genuine risks, blockers, unresolved concerns, or potential problems explicitly supported by the transcript.
+
+A risk must have evidence that it could negatively affect a project, decision, meeting outcome, schedule, resource, compliance, security, or other objective.
+
+Look for statements indicating:
+- a blocker
+- a potential failure
+- an unresolved problem
+- a threat or concern
+- a dependency that may cause problems
+- a delay or resource problem
+- security, compliance, technical, financial, or operational risk
+- uncertainty explicitly presented as a problem
+
+Do NOT extract:
+- normal questions
+- ordinary conversation
+- random statements
+- travel plans
+- locations
+- personal information
+- completed actions
+- suggestions unless explicitly described as a risk
+- vague or unrelated concerns
+- anything not supported by the transcript
+
+If there are no genuine risks, return an empty array.
+
+Return ONLY valid JSON in exactly this format:
+{
+  "risks": []
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class RiskExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript || "");
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new RiskExtractor();
+
+----- summaryExtractor.js -----
+const ai = require("../ollama.service");
+const parser = require("../parser/jsonParser");
+
+const PROMPT = `
+You are an AI meeting assistant. Extract the overview, summary, and summary points from the transcript.
+Return ONLY valid JSON. Do not hallucinate.
+
+{
+  "overview": "One concise sentence describing the meeting.",
+  "summary": "A professional executive summary (100-200 words).",
+  "summaryPoints": ["Point 1", "Point 2"]
+}
+
+Transcript:
+{{TRANSCRIPT}}
+`;
+
+class SummaryExtractor {
+    async extract(transcript) {
+        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const response = await ai.chat(prompt);
+        return parser.parse(response);
+    }
+}
+
+module.exports = new SummaryExtractor();
+
+
+
+========== 5. BENCHMARK FILES ==========
+----- paper-experiment-report.js -----
+require("dotenv").config();
+
+const fs = require("fs");
+const path = require("path");
+const mongoose = require("mongoose");
+
+const Meeting = require("../models/Meeting");
+
+const ROOT = __dirname;
+const RESULTS_DIR = path.join(ROOT, "results");
+
+function section(title) {
+  console.log("\n" + "=".repeat(70));
+  console.log(title);
+  console.log("=".repeat(70));
+}
+
+function safe(value) {
+  if (value === undefined || value === null) return null;
+  return value;
+}
+
+async function main() {
+  console.log("============================================================");
+  console.log("        AI MEETING INTELLIGENCE PAPER EXPERIMENT REPORT");
+  console.log("============================================================");
+
+  // ----------------------------------------------------------
+  // SYSTEM INFORMATION
+  // ----------------------------------------------------------
+
+  section("1. SYSTEM INFORMATION");
+
+  console.log("Node version:", process.version);
+  console.log("Platform:", process.platform);
+  console.log("Architecture:", process.arch);
+  console.log("Working directory:", process.cwd());
+
+  try {
+    const pkg = require("../package.json");
+
+    console.log("\nImportant dependencies:");
+
+    const deps = {
+      ...pkg.dependencies,
+      ...pkg.devDependencies
+    };
+
+    const important = [
+      "mongoose",
+      "express",
+      "ollama",
+      "dotenv",
+      "whisperx"
+    ];
+
+    for (const name of important) {
+      if (deps[name]) {
+        console.log(`${name}: ${deps[name]}`);
+      }
+    }
+  } catch (err) {
+    console.log("package.json could not be read");
+  }
+
+  // ----------------------------------------------------------
+  // ENVIRONMENT
+  // ----------------------------------------------------------
+
+  section("2. AI / OLLAMA CONFIGURATION");
+
+  console.log("OLLAMA_HOST:", process.env.OLLAMA_HOST || "not set");
+  console.log("OLLAMA_MODEL:", process.env.OLLAMA_MODEL || "not set");
+
+  // ----------------------------------------------------------
+  // DATABASE
+  // ----------------------------------------------------------
+
+  section("3. DATABASE");
+
+  if (!process.env.MONGO_URI) {
+    console.log("ERROR: MONGO_URI is not configured.");
+    process.exit(1);
+  }
+
+  await mongoose.connect(process.env.MONGO_URI);
+
+  console.log("MongoDB connected.");
+
+  const meetingCount = await Meeting.countDocuments();
+
+  console.log("Total meetings:", meetingCount);
+
+  const meetings = await Meeting.find({})
+    .sort({ createdAt: -1 })
+    .lean();
+
+  console.log("Meetings retrieved:", meetings.length);
+
+  // ----------------------------------------------------------
+  // MEETING STATISTICS
+  // ----------------------------------------------------------
+
+  section("4. MEETING DATASET STATISTICS");
+
+  let totalWords = 0;
+  let totalTranscriptChars = 0;
+  let totalActions = 0;
+  let totalDecisions = 0;
+  let totalRisks = 0;
+  let totalQuestions = 0;
+
+  const meetingStats = [];
+
+  for (const m of meetings) {
+    const transcript = m.transcript || "";
+
+    const words = transcript.trim()
+      ? transcript.trim().split(/\s+/).length
+      : 0;
+
+    const decisions = m.aiAnalysis?.decisions || [];
+    const actions = m.aiAnalysis?.actionItems || [];
+    const risks = m.aiAnalysis?.risks || [];
+
+    const unanswered =
+      m.aiAnalysis?.questions?.unanswered || [];
+
+    totalWords += words;
+    totalTranscriptChars += transcript.length;
+    totalActions += actions.length;
+    totalDecisions += decisions.length;
+    totalRisks += risks.length;
+    totalQuestions += unanswered.length;
+
+    meetingStats.push({
+      id: m._id.toString(),
+      title: m.title,
+      language: m.language,
+      duration: m.duration,
+      words,
+      transcriptChars: transcript.length,
+      decisions: decisions.length,
+      actionItems: actions.length,
+      risks: risks.length,
+      unansweredQuestions: unanswered.length,
+      createdAt: m.createdAt
+    });
+  }
+
+  console.log("Total transcript words:", totalWords);
+  console.log("Total transcript characters:", totalTranscriptChars);
+  console.log("Total extracted decisions:", totalDecisions);
+  console.log("Total extracted action items:", totalActions);
+  console.log("Total extracted risks:", totalRisks);
+  console.log("Total unanswered questions:", totalQuestions);
+
+  console.log("\nPer-meeting statistics:");
+
+  console.table(meetingStats);
+
+  // ----------------------------------------------------------
+  // CURRENT EXTRACTION RESULTS
+  // ----------------------------------------------------------
+
+  section("5. CURRENT EXTRACTION OUTPUTS");
+
+  for (const m of meetings.slice(0, 10)) {
+    console.log("\nMeeting:", m.title);
+    console.log("ID:", m._id.toString());
+
+    console.log("\nDecisions:");
+    console.log(
+      JSON.stringify(
+        m.aiAnalysis?.decisions || [],
+        null,
+        2
+      )
+    );
+
+    console.log("\nAction Items:");
+    console.log(
+      JSON.stringify(
+        m.aiAnalysis?.actionItems || [],
+        null,
+        2
+      )
+    );
+
+    console.log("\nRisks:");
+    console.log(
+      JSON.stringify(
+        m.aiAnalysis?.risks || [],
+        null,
+        2
+      )
+    );
+
+    console.log("\nUnanswered Questions:");
+    console.log(
+      JSON.stringify(
+        m.aiAnalysis?.questions?.unanswered || [],
+        null,
+        2
+      )
+    );
+  }
+
+  // ----------------------------------------------------------
+  // BENCHMARK RESULT
+  // ----------------------------------------------------------
+
+  section("6. EXISTING BENCHMARK RESULT");
+
+  const benchmarkFile = path.join(
+    RESULTS_DIR,
+    "extraction_accuracy.json"
+  );
+
+  if (fs.existsSync(benchmarkFile)) {
+    const result = JSON.parse(
+      fs.readFileSync(benchmarkFile, "utf8")
+    );
+
+    console.log(
+      JSON.stringify(result, null, 2)
+    );
+  } else {
+    console.log(
+      "Benchmark result file not found:",
+      benchmarkFile
+    );
+  }
+
+  // ----------------------------------------------------------
+  // SOURCE FILE INVENTORY
+  // ----------------------------------------------------------
+
+  section("7. EXPERIMENT / BENCHMARK FILES");
+
+  function listFiles(dir, prefix = "") {
+    if (!fs.existsSync(dir)) return;
+
+    const entries = fs.readdirSync(dir, {
+      withFileTypes: true
+    });
+
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        console.log(
+          prefix + "[DIR] " + entry.name
+        );
+
+        listFiles(
+          full,
+          prefix + "  "
+        );
+      } else {
+        const stat = fs.statSync(full);
+
+        console.log(
+          prefix +
+          entry.name +
+          ` (${stat.size} bytes)`
+        );
+      }
+    }
+  }
+
+  listFiles(ROOT);
+
+  // ----------------------------------------------------------
+  // EXTRACTOR SOURCE
+  // ----------------------------------------------------------
+
+  section("8. EXTRACTOR FILES");
+
+  const extractorDir = path.join(
+    ROOT,
+    "..",
+    "services",
+    "ai",
+    "extractors"
+  );
+
+  if (fs.existsSync(extractorDir)) {
+    const extractorFiles =
+      fs.readdirSync(extractorDir);
+
+    for (const file of extractorFiles) {
+      if (!file.endsWith(".js")) continue;
+
+      const filePath =
+        path.join(extractorDir, file);
+
+      console.log(
+        `\n===== ${file} =====`
+      );
+
+      console.log(
+        fs.readFileSync(
+          filePath,
+          "utf8"
+        )
+      );
+    }
+  }
+
+  // ----------------------------------------------------------
+  // PROCESSOR
+  // ----------------------------------------------------------
+
+  section("9. MEETING PROCESSOR");
+
+  const processorCandidates = [
+    path.join(
+      ROOT,
+      "..",
+      "services",
+      "ai",
+      "processors",
+      "meeting.processor.js"
+    ),
+    path.join(
+      ROOT,
+      "..",
+      "services",
+      "ai",
+      "meeting.processor.js"
+    )
+  ];
+
+  for (const file of processorCandidates) {
+    if (fs.existsSync(file)) {
+      console.log(
+        `\n===== ${file} =====`
+      );
+
+      console.log(
+        fs.readFileSync(
+          file,
+          "utf8"
+        )
+      );
+    }
+  }
+
+  // ----------------------------------------------------------
+  // HARDWARE INFORMATION
+  // ----------------------------------------------------------
+
+  section("10. HARDWARE INFORMATION");
+
+  console.log(
+    "Run this separately if needed:"
+  );
+
+  console.log(
+    'nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv'
+  );
+
+  // ----------------------------------------------------------
+  // SUMMARY
+  // ----------------------------------------------------------
+
+  section("11. PAPER EXPERIMENT SUMMARY");
+
+  console.log(`
+Dataset size:
+  Meetings: ${meetingCount}
+  Transcript words: ${totalWords}
+
+Current extraction totals:
+  Decisions: ${totalDecisions}
+  Action items: ${totalActions}
+  Risks: ${totalRisks}
+  Unanswered questions: ${totalQuestions}
+
+Benchmark:
+  See extraction_accuracy.json above.
+
+IMPORTANT:
+This report is intended to identify the experimental evidence
+needed for the research paper.
+`);
+
+  // ----------------------------------------------------------
+  // SAVE MACHINE-READABLE REPORT
+  // ----------------------------------------------------------
+
+  const output = {
+    generatedAt: new Date().toISOString(),
+
+    system: {
+      node: process.version,
+      platform: process.platform,
+      architecture: process.arch
+    },
+
+    dataset: {
+      meetings: meetingCount,
+      transcriptWords: totalWords,
+      transcriptCharacters: totalTranscriptChars
+    },
+
+    extractionTotals: {
+      decisions: totalDecisions,
+      actionItems: totalActions,
+      risks: totalRisks,
+      unansweredQuestions: totalQuestions
+    },
+
+    meetings: meetingStats
+  };
+
+  const outputFile = path.join(
+    RESULTS_DIR,
+    "paper_experiment_report.json"
+  );
+
+  fs.mkdirSync(
+    RESULTS_DIR,
+    { recursive: true }
+  );
+
+  fs.writeFileSync(
+    outputFile,
+    JSON.stringify(
+      output,
+      null,
+      2
+    )
+  );
+
+  console.log(
+    "\n[SAVED]",
+    outputFile
+  );
+
+  await mongoose.disconnect();
+
+  console.log("\nMongoDB disconnected.");
+}
+
+main().catch(err => {
+  console.error("\nEXPERIMENT REPORT FAILED");
+  console.error(err);
+  process.exit(1);
+});
+
+----- run-embedding-benchmark.js -----
+/**
+ * Embedding Generation Performance Benchmark
+ *
+ * MEASURES SYSTEM PERFORMANCE (NOT accuracy):
+ * - Chunking time
+ * - Per-chunk embedding generation time (Ollama / nomic-embed-text)
+ * - Batch processing throughput
+ *
+ * Uses the existing chunking service + OllamaEmbeddingProvider.
+ * Does NOT write to MongoDB (benchmark-only).
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const mongoose = require('mongoose');
+const Meeting = require('../models/Meeting');
+const chunkingService = require('../services/embeddings/chunking.service');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+
+async function main() {
+  console.log('============================================================');
+  console.log('  EMBEDDING PERFORMANCE BENCHMARK');
+  console.log('============================================================');
+
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  const meeting = await Meeting.findOne({ transcript: { $ne: '' } }).lean();
+  if (!meeting) throw new Error('No meeting with transcript found.');
+  const transcript = meeting.transcript;
+
+  // 1. Measure chunking
+  const chunkStart = Date.now();
+  const chunks = chunkingService.chunkTranscript(meeting._id.toString(), transcript, { meetingType: meeting.aiAnalysis?.meetingType });
+  const chunkTimeMs = Date.now() - chunkStart;
+
+  console.log(`Transcript: ${transcript.length} chars -> ${chunks.length} chunks (${chunkTimeMs}ms)`);
+
+  // 2. Measure embedding generation via Ollama / nomic-embed-text
+  // Highlight: Qdrant is down and the provider falls back to ollama. Test real embedding via the provider
+  const providerFactory = require('../services/embeddings/embedding.factory');
+  const provider = providerFactory.getProvider('ollama', { model: 'nomic-embed-text' });
+
+  const perChunkTimes = [];
+  let success = 0;
+  let failures = 0;
+
+  for (let i = 0; i < Math.min(chunks.length, 20); i++) {
+    const start = Date.now();
+    try {
+      const vectors = await provider.generateEmbeddings([chunks[i].text]);
+      perChunkTimes.push(Date.now() - start);
+      success++;
+    } catch (e) {
+      console.error(`Chunk ${i} failed:`, e.message);
+      failures++;
+    }
+  }
+
+  const result = {
+    benchmark: 'embedding_system_performance',
+    timestamp: new Date().toISOString(),
+    configuration: {
+      embeddingModel: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
+      provider: 'ollama',
+      chunkSizeMax: 500,
+      batchSize: 1,
+      hardware: {
+        cpu: '12th Gen Intel(R) Core(TM) i5-12450H (12 cores)',
+        gpu: 'NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)',
+        ramGB: 16,
+        os: 'Windows 11',
+        node: process.version,
+      },
+    },
+    chunking: {
+      transcriptChars: transcript.length,
+      chunksCreated: chunks.length,
+      chunkTimeMs,
+      avgChunkChars: parseFloat((transcript.length / Math.max(chunks.length, 1)).toFixed(1)),
+    },
+    embedding: {
+      sampledChunks: Math.min(chunks.length, 20),
+      success,
+      failures,
+      perChunkTimesMs: perChunkTimes,
+      meanPerChunkMs: perChunkTimes.length ? parseFloat((perChunkTimes.reduce((a, b) => a + b, 0) / perChunkTimes.length).toFixed(1)) : 0,
+      minPerChunkMs: perChunkTimes.length ? Math.min(...perChunkTimes) : 0,
+      maxPerChunkMs: perChunkTimes.length ? Math.max(...perChunkTimes) : 0,
+    },
+    disclaimer: 'SYSTEM PERFORMANCE ONLY - NOT an accuracy metric.',
+  };
+
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  const outFile = path.join(RESULTS_DIR, 'embedding_benchmark.json');
+  fs.writeFileSync(outFile, JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  console.log(`\n[SAVED] ${outFile}`);
+  await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Benchmark failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+----- run-extraction-accuracy.js -----
+/**
+ * Extraction Accuracy Benchmark
+ *
+ * Compares AI extraction output against manually annotated
+ * ground truth for multiple meetings.
+ *
+ * Benchmark only â€” does NOT modify production code.
+ */
+
+const path = require('path');
+const fs = require('fs');
+
+require('dotenv').config({
+  path: path.join(__dirname, '../.env'),
+});
+
+const mongoose = require('mongoose');
+const Meeting = require('../models/Meeting');
+
+const GROUND_TRUTH_FILES = [
+  path.join(
+    __dirname,
+    'data',
+    'extraction_ground_truth.json'
+  ),
+  path.join(
+    __dirname,
+    'data',
+    'extraction_ground_truth_sec_growth.json'
+  ),
+];
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+
+function normalize(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function similarity(a, b) {
+  const A = new Set(
+    normalize(a)
+      .split(' ')
+      .filter(Boolean)
+  );
+
+  const B = new Set(
+    normalize(b)
+      .split(' ')
+      .filter(Boolean)
+  );
+
+  if (!A.size || !B.size) return 0;
+
+  const intersection = [...A].filter((x) =>
+    B.has(x)
+  ).length;
+
+  const union = new Set([...A, ...B]).size;
+
+  return intersection / union;
+}
+
+function evaluate(predicted, expected, threshold = 0.5) {
+  const used = new Set();
+
+  let truePositive = 0;
+
+  for (const prediction of predicted) {
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    expected.forEach((truth, index) => {
+      if (used.has(index)) return;
+
+      const score = similarity(prediction, truth);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    });
+
+    if (
+      bestScore >= threshold &&
+      bestIndex !== -1
+    ) {
+      truePositive++;
+      used.add(bestIndex);
+    }
+  }
+
+  const falsePositive =
+    predicted.length - truePositive;
+
+  const falseNegative =
+    expected.length - truePositive;
+
+  const precision =
+    truePositive + falsePositive === 0
+      ? 0
+      : truePositive /
+        (truePositive + falsePositive);
+
+  const recall =
+    truePositive + falseNegative === 0
+      ? 0
+      : truePositive /
+        (truePositive + falseNegative);
+
+  const f1 =
+    precision + recall === 0
+      ? 0
+      : (2 * precision * recall) /
+        (precision + recall);
+
+  return {
+    truePositive,
+    falsePositive,
+    falseNegative,
+    precision: Number(
+      precision.toFixed(4)
+    ),
+    recall: Number(
+      recall.toFixed(4)
+    ),
+    f1: Number(
+      f1.toFixed(4)
+    ),
+  };
+}
+
+/**
+ * Aggregate raw TP / FP / FN across meetings.
+ *
+ * This produces micro-averaged metrics, which is
+ * appropriate when combining multiple benchmark samples.
+ */
+function aggregateMetrics(metricList) {
+  const truePositive = metricList.reduce(
+    (sum, m) => sum + m.truePositive,
+    0
+  );
+
+  const falsePositive = metricList.reduce(
+    (sum, m) => sum + m.falsePositive,
+    0
+  );
+
+  const falseNegative = metricList.reduce(
+    (sum, m) => sum + m.falseNegative,
+    0
+  );
+
+  const expected = truePositive + falseNegative;
+  const predicted = truePositive + falsePositive;
+
+  const precision =
+    predicted === 0
+      ? 0
+      : truePositive / predicted;
+
+  const recall =
+    expected === 0
+      ? 0
+      : truePositive / expected;
+
+  const f1 =
+    precision + recall === 0
+      ? 0
+      : (2 * precision * recall) /
+        (precision + recall);
+
+  return {
+    expected,
+    predicted,
+    truePositive,
+    falsePositive,
+    falseNegative,
+    precision: Number(
+      precision.toFixed(4)
+    ),
+    recall: Number(
+      recall.toFixed(4)
+    ),
+    f1: Number(
+      f1.toFixed(4)
+    ),
+  };
+}
+
+async function evaluateMeeting(
+  groundTruth
+) {
+  const meeting = await Meeting.findById(
+    groundTruth.meetingId
+  ).lean();
+
+  if (!meeting) {
+    throw new Error(
+      `Meeting not found: ${groundTruth.meetingId}`
+    );
+  }
+
+  const ai = meeting.aiAnalysis || {};
+
+  const predictedDecisions =
+    ai.decisions || [];
+
+  const predictedActions =
+    (ai.actionItems || []).map(
+      (item) => item.task || ''
+    );
+
+  const predictedRisks =
+    ai.risks || [];
+
+  const predictedQuestions =
+    (
+      ai.questions &&
+      ai.questions.unanswered
+    ) || [];
+
+  const decisionMetrics = evaluate(
+    predictedDecisions,
+    groundTruth.decisions
+  );
+
+  const actionMetrics = evaluate(
+    predictedActions,
+    groundTruth.actionItems.map(
+      (x) => x.task
+    )
+  );
+
+  const riskMetrics = evaluate(
+    predictedRisks,
+    groundTruth.risks
+  );
+
+  const questionMetrics = evaluate(
+    predictedQuestions,
+    groundTruth.questions.unanswered
+  );
+
+  return {
+    meeting: {
+      id: groundTruth.meetingId,
+      title: groundTruth.title,
+    },
+
+    results: {
+      decisions: {
+        expected:
+          groundTruth.decisions.length,
+        predicted:
+          predictedDecisions.length,
+        ...decisionMetrics,
+      },
+
+      actionItems: {
+        expected:
+          groundTruth.actionItems.length,
+        predicted:
+          predictedActions.length,
+        ...actionMetrics,
+      },
+
+      risks: {
+        expected:
+          groundTruth.risks.length,
+        predicted:
+          predictedRisks.length,
+        ...riskMetrics,
+      },
+
+      unansweredQuestions: {
+        expected:
+          groundTruth.questions.unanswered
+            .length,
+        predicted:
+          predictedQuestions.length,
+        ...questionMetrics,
+      },
+    },
+  };
+}
+
+async function main() {
+  console.log(
+    '============================================================'
+  );
+
+  console.log(
+    '       MULTI-MEETING EXTRACTION ACCURACY BENCHMARK'
+  );
+
+  console.log(
+    '============================================================'
+  );
+
+  console.log(
+    `Ground-truth datasets: ${GROUND_TRUTH_FILES.length}`
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Validate ground-truth files
+   * ----------------------------------------------------------
+   */
+
+  const groundTruths = [];
+
+  for (const file of GROUND_TRUTH_FILES) {
+    if (!fs.existsSync(file)) {
+      throw new Error(
+        `Ground truth file not found:\n${file}`
+      );
+    }
+
+    const data = JSON.parse(
+      fs.readFileSync(file, 'utf8')
+    );
+
+    groundTruths.push(data);
+
+    console.log(
+      `\nLoaded: ${path.basename(file)}`
+    );
+
+    console.log(
+      `  Meeting: ${data.title}`
+    );
+
+    console.log(
+      `  Decisions: ${data.decisions.length}`
+    );
+
+    console.log(
+      `  Action Items: ${data.actionItems.length}`
+    );
+
+    console.log(
+      `  Risks: ${data.risks.length}`
+    );
+
+    console.log(
+      `  Unanswered Questions: ${
+        data.questions.unanswered.length
+      }`
+    );
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Connect MongoDB
+   * ----------------------------------------------------------
+   */
+
+  await mongoose.connect(
+    process.env.MONGO_URI,
+    {
+      serverSelectionTimeoutMS: 5000,
+    }
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Evaluate every meeting
+   * ----------------------------------------------------------
+   */
+
+  const meetingResults = [];
+
+  for (const groundTruth of groundTruths) {
+    console.log(
+      `\nEvaluating: ${groundTruth.title}`
+    );
+
+    const result =
+      await evaluateMeeting(
+        groundTruth
+      );
+
+    meetingResults.push(result);
+
+    console.log(
+      JSON.stringify(
+        result.results,
+        null,
+        2
+      )
+    );
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Aggregate metrics by extraction category
+   * ----------------------------------------------------------
+   */
+
+  const overall = {
+    decisions: aggregateMetrics(
+      meetingResults.map(
+        (m) => m.results.decisions
+      )
+    ),
+
+    actionItems: aggregateMetrics(
+      meetingResults.map(
+        (m) => m.results.actionItems
+      )
+    ),
+
+    risks: aggregateMetrics(
+      meetingResults.map(
+        (m) => m.results.risks
+      )
+    ),
+
+    unansweredQuestions:
+      aggregateMetrics(
+        meetingResults.map(
+          (m) =>
+            m.results.unansweredQuestions
+        )
+      ),
+  };
+
+  /*
+   * ----------------------------------------------------------
+   * Macro average
+   *
+   * Average of the four category F1 scores.
+   * ----------------------------------------------------------
+   */
+
+  const macroPrecision =
+    (
+      overall.decisions.precision +
+      overall.actionItems.precision +
+      overall.risks.precision +
+      overall.unansweredQuestions.precision
+    ) / 4;
+
+  const macroRecall =
+    (
+      overall.decisions.recall +
+      overall.actionItems.recall +
+      overall.risks.recall +
+      overall.unansweredQuestions.recall
+    ) / 4;
+
+  const macroF1 =
+    (
+      overall.decisions.f1 +
+      overall.actionItems.f1 +
+      overall.risks.f1 +
+      overall.unansweredQuestions.f1
+    ) / 4;
+
+  /*
+   * ----------------------------------------------------------
+   * Final benchmark object
+   * ----------------------------------------------------------
+   */
+
+  const results = {
+    benchmark:
+      'multi_meeting_extraction_accuracy',
+
+    timestamp:
+      new Date().toISOString(),
+
+    datasetCount:
+      groundTruths.length,
+
+    meetings:
+      meetingResults,
+
+    overall: {
+      decisions:
+        overall.decisions,
+
+      actionItems:
+        overall.actionItems,
+
+      risks:
+        overall.risks,
+
+      unansweredQuestions:
+        overall.unansweredQuestions,
+
+      macroAverage: {
+        precision: Number(
+          macroPrecision.toFixed(4)
+        ),
+
+        recall: Number(
+          macroRecall.toFixed(4)
+        ),
+
+        f1: Number(
+          macroF1.toFixed(4)
+        ),
+      },
+    },
+
+    methodology: {
+      matching:
+        'Token Jaccard similarity',
+
+      similarityThreshold: 0.5,
+
+      averaging:
+        'Micro-average across meetings for each extraction category; macro-average across the four categories',
+
+      metrics: [
+        'Precision',
+        'Recall',
+        'F1',
+      ],
+
+      note:
+        'Ground truth was manually annotated from the meeting transcripts. Benchmark evaluates extraction quality only and does not modify production extraction code.',
+    },
+  };
+
+  /*
+   * ----------------------------------------------------------
+   * Save results
+   * ----------------------------------------------------------
+   */
+
+  fs.mkdirSync(
+    RESULTS_DIR,
+    { recursive: true }
+  );
+
+  const outputFile = path.join(
+    RESULTS_DIR,
+    'extraction_accuracy.json'
+  );
+
+  fs.writeFileSync(
+    outputFile,
+    JSON.stringify(
+      results,
+      null,
+      2
+    )
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Console summary
+   * ----------------------------------------------------------
+   */
+
+  console.log(
+    '\n============================================================'
+  );
+
+  console.log(
+    '                    FINAL RESULTS'
+  );
+
+  console.log(
+    '============================================================'
+  );
+
+  console.log(
+    JSON.stringify(
+      results.overall,
+      null,
+      2
+    )
+  );
+
+  console.log(
+    `\n[SAVED] ${outputFile}`
+  );
+
+  await mongoose.disconnect();
+}
+
+main().catch((error) => {
+  console.error(
+    '\nBenchmark failed:',
+    error
+  );
+
+  if (
+    mongoose.connection.readyState === 1
+  ) {
+    mongoose.disconnect();
+  }
+
+  process.exit(1);
+});
+
+----- run-extraction-benchmark.js -----
+/**
+ * Extraction Benchmark: Parallel vs Sequential LLM Extraction
+ *
+ * SAFETY: This benchmark REUSES the existing production extractor services
+ * and validator WITHOUT modifying any production file. It is a standalone
+ * benchmark-only runner.
+ *
+ * Benchmark methodology:
+ * - Loads N real meeting transcripts (or a synthetic benchmark transcript)
+ * - Runs all 9 extraction stages SEQUENTIALLY (one after another)
+ * - Runs all 9 extraction stages IN PARALLEL (Promise.all, same as production)
+ * - Records per-stage wall-clock inference time
+ * - Repeats R times (configurable)
+ * - Computes aggregate statistics: mean, median, min, max, stddev
+ * - Speedup = sequential_total / parallel_total
+ * - Latency reduction % = (seq - par) / seq * 100
+ *
+ * Model: qwen2.5:7b via Ollama (temperature=0, as configured in .env)
+ *
+ * Output: JSON written to server/benchmarks/results/extraction_benchmark.json
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+const mongoose = require('mongoose');
+const validator = require('../services/ai/validators/meetingSchema');
+const Meeting = require('../models/Meeting');
+
+const summaryExtractor = require('../services/ai/extractors/summaryExtractor');
+const agendaExtractor = require('../services/ai/extractors/agendaExtractor');
+const decisionExtractor = require('../services/ai/extractors/decisionExtractor');
+const actionItemExtractor = require('../services/ai/extractors/actionItemExtractor');
+const riskExtractor = require('../services/ai/extractors/riskExtractor');
+const questionExtractor = require('../services/ai/extractors/questionExtractor');
+const entityExtractor = require('../services/ai/extractors/entityExtractor');
+const classifierExtractor = require('../services/ai/extractors/classifierExtractor');
+const conversationIntelligenceExtractor = require('../services/ai/extractors/conversationIntelligenceExtractor');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const RUNS = parseInt(process.env.BENCH_RUNS || '1', 10);
+const TRANSCRIPT_ID = process.env.BENCH_TRANSCRIPT_ID || ''; // empty = use largest
+const SOURCE = process.env.BENCH_SOURCE || 'db'; // db | synthetic
+const MAX_CHARS = parseInt(process.env.BENCH_MAX_CHARS || '24000', 10);
+
+const STAGES = [
+  { name: 'Summary Extraction', extractor: summaryExtractor, validate: (d, t) => validator.validateSummary(d, t), merge: (d) => d },
+  { name: 'Agenda Extraction', extractor: agendaExtractor, validate: (d, t) => validator.validateAgenda(d, t), merge: (d) => d },
+  { name: 'Decision Extraction', extractor: decisionExtractor, validate: (d, t) => validator.validateDecisions(d, t), merge: (d) => d },
+  { name: 'Action Item Extraction', extractor: actionItemExtractor, validate: (d, t) => validator.validateActionItems(d, t), merge: (d) => d },
+  { name: 'Risk Extraction', extractor: riskExtractor, validate: (d, t) => validator.validateRisks(d, t), merge: (d) => d },
+  { name: 'Question Extraction', extractor: questionExtractor, validate: (d, t) => validator.validateQuestions(d, t), merge: (d) => d },
+  { name: 'Entity Extraction', extractor: entityExtractor, validate: (d, t) => validator.validateEntities(d), merge: (d) => d },
+  { name: 'Classifier', extractor: classifierExtractor, validate: (d, t) => validator.validateClassifier(d), merge: (d) => d },
+  { name: 'Conversation Intelligence', extractor: conversationIntelligenceExtractor, validate: (d, t) => validator.validateConversationIntelligence(d), merge: (d) => d },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function mean(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function stddev(arr) {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((acc, v) => acc + (v - m) ** 2, 0) / (arr.length - 1));
+}
+
+function stats(arr) {
+  return {
+    n: arr.length,
+    mean_ms: Math.round(mean(arr)),
+    median_ms: Math.round(median(arr)),
+    min_ms: arr.length ? Math.round(Math.min(...arr)) : 0,
+    max_ms: arr.length ? Math.round(Math.max(...arr)) : 0,
+    stddev_ms: Math.round(stddev(arr)),
+  };
+}
+
+async function getTranscript() {
+  if (SOURCE === 'synthetic') {
+    // Clearly-labeled SYNTHETIC benchmark transcript: used ONLY to measure
+    // software throughput/latency. NOT used for any accuracy claim.
+    const text = `
+John: Welcome everyone. Let's start the project review meeting.
+Sarah: We need to discuss the Q3 release plan and the deployment timeline.
+Mike: I'll complete the authentication module by Friday.
+John: Let's decide right now about the cloud provider.
+Sarah: We have two options: AWS and Azure.
+Mike: I recommend AWS because of the better integration with our existing stack.
+Sarah: What about the budget limitations?
+John: The budget was approved for this quarter. Let's confirm the migration plan.
+Mike: We should also handle the data migration risks. There could be downtime.
+Sarah: I'll prepare a risk assessment report by Wednesday.
+John: Can everyone attend the next meeting on Thursday?
+Sarah: Yes, I will be there.
+Mike: I need to check my calendar, but I think I can make it.
+John: We'll deploy on Monday after the final testing.
+Sarah: Don't forget the security review. Tiago will handle it.
+Mike: I'll set up a bot for container security.
+John: Let's also rename the anti-abuse team to data science.
+Sarah: I agree. That's a good decision.
+Mike: The meeting type is a project review with follow-up required for the release.
+`;
+    return text.repeat(Math.max(1, Math.ceil(MAX_CHARS / text.length))).substring(0, MAX_CHARS) + '\n...[SYNTHETIC BENCHMARK TRANSCRIPT]';
+  }
+
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  let query = { status: 'completed', transcript: { $ne: '' } };
+  if (TRANSCRIPT_ID) query._id = TRANSCRIPT_ID;
+  const meetings = await mongoose.model('Meeting').find(query).sort({ wordCount: -1 }).limit(5).lean();
+  if (!meetings.length) throw new Error('No completed meetings with transcripts found in DB');
+  const chosen = TRANSCRIPT_ID ? meetings[0] : meetings[0]; // largest
+  const t = chosen.transcript || '';
+  return t.length > MAX_CHARS ? t.substring(0, MAX_CHARS) + '\n...[TRUNCATED FOR BENCHMARK]' : t;
+}
+
+// ---------------------------------------------------------------------------
+// Sequential run (benchmark-only; safely reproduces the pre-parallel pipeline
+// from the same stage functions, without touching production code)
+// ---------------------------------------------------------------------------
+async function runSequential(transcript) {
+  const stages = [];
+  let total = 0;
+  for (const stage of STAGES) {
+    const start = Date.now();
+    try {
+      const data = await stage.extractor.extract(transcript);
+      const inference = Date.now() - start;
+      stage.validate(data, transcript);
+      const validation = Date.now() - start - inference;
+      total += inference;
+      stages.push({ name: stage.name, inferenceTime_ms: inference, validationTime_ms: validation, totalTime_ms: Date.now() - start, status: 'Success' });
+    } catch (err) {
+      const duration = Date.now() - start;
+      total += duration;
+      stages.push({ name: stage.name, inferenceTime_ms: duration, validationTime_ms: 0, totalTime_ms: duration, status: 'Failed: ' + err.message });
+    }
+  }
+  return { total_ms: total, stages };
+}
+
+// ---------------------------------------------------------------------------
+// Parallel run (mirrors production Promise.all)
+// ---------------------------------------------------------------------------
+async function runParallel(transcript) {
+  const startAll = Date.now();
+  const stageResults = await Promise.all(
+    STAGES.map(async (stage) => {
+      const stageStart = Date.now();
+      try {
+        const data = await stage.extractor.extract(transcript);
+        const inference = Date.now() - stageStart;
+        stage.validate(data, transcript);
+        const validation = Date.now() - stageStart - inference;
+        return { name: stage.name, inferenceTime_ms: inference, validationTime_ms: validation, totalTime_ms: Date.now() - stageStart, status: 'Success' };
+      } catch (err) {
+        const duration = Date.now() - stageStart;
+        return { name: stage.name, inferenceTime_ms: duration, validationTime_ms: 0, totalTime_ms: duration, status: 'Failed: ' + err.message };
+      }
+    })
+  );
+  return { total_ms: Date.now() - startAll, stages: stageResults };
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+async function main() {
+  console.log('============================================================');
+  console.log('  EXTRACTION BENCHMARK: PARALLEL vs SEQUENTIAL');
+  console.log('============================================================');
+  console.log(`  Runs: ${RUNS}`);
+  console.log(`  Source: ${SOURCE}`);
+  console.log(`  Model: ${process.env.MODEL_NAME || process.env.OLLAMA_MODEL || 'qwen2.5:7b'}`);
+  console.log(`  Temperature: ${process.env.TEMPERATURE || '0'}`);
+  console.log(`  Max chars: ${MAX_CHARS}`);
+
+  const transcript = await getTranscript();
+  console.log(`  Transcript chars: ${transcript.length}`);
+
+  const runId = new Date().toISOString().replace(/[:.]/g, '-');
+  const results = {
+    benchmark: 'extraction_parallel_vs_sequential',
+    timestamp: new Date().toISOString(),
+    runId,
+    configuration: {
+      model: process.env.MODEL_NAME || process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+      temperature: process.env.TEMPERATURE || '0',
+      num_ctx: process.env.MAX_CONTEXT || '8192',
+      maxChars: MAX_CHARS,
+      source: SOURCE,
+      transcriptId: TRANSCRIPT_ID || 'largest_in_db',
+      numStages: STAGES.length,
+      hardware: {
+        cpu: '12th Gen Intel(R) Core(TM) i5-12450H (12 cores)',
+        gpu: 'NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)',
+        ramGB: 16,
+        os: 'Windows 11',
+        node: process.version,
+      },
+    },
+    runs: [],
+  };
+
+  for (let r = 1; r <= RUNS; r++) {
+    console.log(`\n--- Run ${r}/${RUNS} ---`);
+
+    const seqStart = Date.now();
+    const seq = await runSequential(transcript);
+    const seqWallClock = Date.now() - seqStart;
+
+    const parStart = Date.now();
+    const par = await runParallel(transcript);
+    const parWallClock = Date.now() - parStart;
+
+    const speedup = seqWallClock / parWallClock;
+    const latencyReductionPercent = ((seqWallClock - parWallClock) / seqWallClock) * 100;
+
+    const run = {
+      runNumber: r,
+      transcriptChars: transcript.length,
+      sequential: {
+        wallClockMs: seqWallClock,
+        sumStageInferenceMs: seq.total_ms,
+        stages: seq.stages,
+      },
+      parallel: {
+        wallClockMs: parWallClock,
+        sumStageInferenceMs: par.total_ms,
+        stages: par.stages,
+      },
+      speedup: parseFloat(speedup.toFixed(3)),
+      latencyReductionPercent: parseFloat(latencyReductionPercent.toFixed(2)),
+    };
+    results.runs.push(run);
+
+    console.log(`  Sequential: ${seqWallClock}ms`);
+    console.log(`  Parallel:   ${parWallClock}ms`);
+    console.log(`  Speedup:    ${run.speedup}x`);
+    console.log(`  Reduction:  ${run.latencyReductionPercent}%`);
+  }
+
+  // Aggregate
+  const seqTimes = results.runs.map((r) => r.sequential.wallClockMs);
+  const parTimes = results.runs.map((r) => r.parallel.wallClockMs);
+  const speedups = results.runs.map((r) => r.speedup);
+  const reductions = results.runs.map((r) => r.latencyReductionPercent);
+
+  results.aggregate = {
+    sequential: stats(seqTimes),
+    parallel: stats(parTimes),
+    speedup: {
+      n: speedups.length,
+      mean_x: parseFloat(mean(speedups).toFixed(3)),
+      median_x: parseFloat(median(speedups).toFixed(3)),
+      min_x: parseFloat(Math.min(...speedups).toFixed(3)),
+      max_x: parseFloat(Math.max(...speedups).toFixed(3)),
+    },
+    latencyReductionPercent: {
+      n: reductions.length,
+      mean_pct: parseFloat(mean(reductions).toFixed(2)),
+      median_pct: parseFloat(median(reductions).toFixed(2)),
+      min_pct: parseFloat(Math.min(...reductions).toFixed(2)),
+      max_pct: parseFloat(Math.max(...reductions).toFixed(2)),
+    },
+  };
+
+  results.speedupFormula = 'speedup = sequential_wall_clock / parallel_wall_clock';
+  results.latencyReductionFormula = 'latency_reduction_pct = ((seq - par) / seq) * 100';
+  results.disclaimer =
+    'These are SYNTHETIC BENCHMARK measurements of LLM inference wall-clock latency for software throughput comparison. They are NOT model accuracy metrics.';
+
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  const outFile = path.join(RESULTS_DIR, `extraction_benchmark_${runId}.json`);
+  fs.writeFileSync(outFile, JSON.stringify(results, null, 2));
+  console.log(`\n==== AGGREGATES ====`);
+  console.log(JSON.stringify(results.aggregate, null, 2));
+  console.log(`\nSaved to: ${outFile}`);
+
+  if (mongoose.connection.readyState === 1) await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Benchmark failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+----- run-extraction-quality-check.js -----
+/**
+ * Extraction Quality Assessment
+ *
+ * Determines whether structured extraction accuracy metrics (Precision, Recall,
+ * F1) can be legitimately computed for:
+ *   - Decisions
+ *   - Action Items
+ *   - Risks
+ *   - Questions
+ *
+ * Rule: DO NOT fabricate ground truth. Report NOT MEASURED if no
+ * reference/annotated labels exist.
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const mongoose = require('mongoose');
+const Meeting = require('../models/Meeting');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+
+async function main() {
+  console.log('============================================================');
+  console.log('  EXTRACTION QUALITY ASSESSMENT');
+  console.log('============================================================');
+
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  const meetings = await Meeting.find({ status: 'completed' }).lean();
+
+  const report = {
+    benchmark: 'extraction_quality_assessment',
+    timestamp: new Date().toISOString(),
+    status: 'NOT_MEASURED',
+    reason: 'No annotated reference labels (ground truth) exist for extraction quality evaluation.',
+    evidence: {
+      referenceSummaries: 'NOT FOUND - no reference summary data exists in repository',
+      expectedDecisions: 'NOT FOUND - no gold-standard decision labels',
+      expectedActionItems: 'NOT FOUND - no gold-standard action item labels',
+      expectedRisks: 'NOT FOUND - no gold-standard risk labels',
+      annotatedTranscripts: 'NOT FOUND - test/stt/ directories are empty',
+      manuallyVerifiedOutputs: 'NOT FOUND - no verified meeting outputs in repository',
+      testFixtures: 'NOT FOUND - no test fixtures for extraction quality',
+    },
+    whatExists: {
+      meetings: meetings.length,
+      extractedDecisions: meetings.reduce((a, m) => a + (m.aiAnalysis?.decisions?.length || 0), 0),
+      extractedActionItems: meetings.reduce((a, m) => a + (m.aiAnalysis?.actionItems?.length || 0), 0),
+      extractedRisks: meetings.reduce((a, m) => a + (m.aiAnalysis?.risks?.length || 0), 0),
+      note: 'Extraction outputs exist but no labeled gold-standard to compare them against.',
+    },
+    recommendation: {
+      minimumManualVerificationSet: [
+        'Manually verify 5 meetings x ~10 extracted items = ~50 action items across the 3 real meetings.',
+        'Label each extracted item as: correct, partially-correct, incorrect, missed (gold standard).',
+        'After labeling, compute token/partial matching P/R/F1 using the benchmark harness.',
+      ],
+      requiredFile: 'server/benchmarks/data/extraction_ground_truth.json',
+    },
+  };
+
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(RESULTS_DIR, 'extraction_quality.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report, null, 2));
+  console.log('[SAVED] server/benchmarks/results/extraction_quality.json');
+  await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Assessment failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+----- run-grounding-benchmark.js -----
+/**
+ * Transcript-Grounding Evaluation Benchmark
+ *
+ * PURPOSE:
+ * Inspects the actual transcript-grounding implementation and measures
+ * directly observable system statistics from existing stored data.
+ *
+ * The grounding implementation (server/services/ai/validators/meetingSchema.js
+ * - verifySemanticMatch) uses a lexical-overlap threshold of 0.2 (20%):
+ *   matchRatio = matchedWords / extractedWords
+ *   if (matchRatio < 0.2) -> "Semantic match: FAIL"
+ *
+ * IMPORTANT: The current implementation LOGS failures but ALWAYS KEEPS the item
+ * ("Kept to prevent data loss"). No item is ever rejected/removed at runtime.
+ *
+ * This benchmark does NOT create fake ground truth. It reports only directly
+ * observable system statistics from the production data.
+ *
+ * Metrics reported:
+ * - total extracted items per type (decisions, action items, risks, questions)
+ * - items that FAIL the 20% lexical-overlap threshold
+ * - unsupported-item rate = failing_count / total_count
+ * - rejection count (0, because they are kept)
+ * - false-rejection count: NOT MEASURED (requires validated ground truth)
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const mongoose = require('mongoose');
+
+const Meeting = require('../models/Meeting');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+const THRESHOLD = 0.2; // 20% lexical overlap threshold from meetingSchema.js
+
+/**
+ * Re-implements the verifySemanticMatch algorithm without mutating anything.
+ */
+function semanticCheck(text, transcriptLower) {
+  if (!transcriptLower) return { matchRatio: 1, matched: true, matchedWords: 0, totalWords: 0 };
+  if (!text || typeof text !== 'string') return { matchRatio: 1, matched: true, matchedWords: 0, totalWords: 0 };
+
+  const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+  if (!words.length) return { matchRatio: 1, matched: true, matchedWords: 0, totalWords: 0 };
+
+  let matchedWords = 0;
+  for (const word of words) {
+    if (transcriptLower.includes(word)) matchedWords++;
+  }
+  const matchRatio = matchedWords / words.length;
+
+  return {
+    matchRatio: parseFloat(matchRatio.toFixed(4)),
+    matched: matchRatio >= THRESHOLD,
+    matchedWords,
+    totalWords: words.length,
+  };
+}
+
+async function main() {
+  console.log('============================================================');
+  console.log('  TRANSCRIPT-GROUNDING EVALUATION');
+  console.log('============================================================');
+
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  const meetings = await Meeting.find({ status: 'completed', transcript: { $ne: '' } }).lean();
+
+  if (!meetings.length) {
+    console.log('No completed meetings found with transcripts.');
+    process.exit(1);
+  }
+
+  const typeKeys = ['decisions', 'actionItems', 'risks', 'answeredQuestions', 'unansweredQuestions'];
+
+  const report = {
+    benchmark: 'transcript_grounding_evaluation',
+    timestamp: new Date().toISOString(),
+    implementation: {
+      file: 'server/services/ai/validators/meetingSchema.js',
+      method: 'verifySemanticMatch',
+      threshold: THRESHOLD,
+      behavior: 'LOGS FAILURES BUT KEEPS ITEMS â€” "Kept to prevent data loss". No items are ever rejected at runtime.',
+    },
+    meetings: [],
+    totals: {},
+    aggregate: {},
+    notes: {},
+  };
+
+  // Initialize totals
+  for (const key of typeKeys) {
+    report.totals[key] = { total: 0, grounded: 0, unsupported: 0, rate: 0 };
+  }
+
+  for (const m of meetings) {
+    const transcriptLower = (m.transcript || '').toLowerCase();
+    const analysis = m.aiAnalysis || {};
+
+    const decisions = analysis.decisions || [];
+    const actionItems = (analysis.actionItems || []).map((a) =>
+      a && typeof a === 'object' ? a.task || '' : String(a || '')
+    );
+    const risks = analysis.risks || [];
+    const answeredQuestions = analysis.questions?.answered || [];
+    const unansweredQuestions = analysis.questions?.unanswered || [];
+
+    const groups = {
+      decisions,
+      actionItems,
+      risks,
+      answeredQuestions,
+      unansweredQuestions,
+    };
+
+    const perMeeting = { title: m.title, meetingId: m._id.toString() };
+
+    for (const key of typeKeys) {
+      const items = groups[key] || [];
+      const results = items.map((text) => {
+        const itemText = typeof text === 'string' ? text : String(text || '');
+        return {
+          text: itemText,
+          ...semanticCheck(itemText, transcriptLower),
+        };
+      });
+
+      const unsupported = results.filter((r) => !r.matched).length;
+      const grounded = results.filter((r) => r.matched).length;
+
+      report.totals[key].total += results.length;
+      report.totals[key].unsupported += unsupported;
+      report.totals[key].grounded += grounded;
+
+      perMeeting[key] = {
+        total: results.length,
+        grounded,
+        unsupported,
+        items: results,
+      };
+    }
+
+    report.meetings.push(perMeeting);
+  }
+
+  // Compute rates
+  for (const key of typeKeys) {
+    const d = report.totals[key];
+    d.rate = d.total > 0 ? parseFloat(((d.unsupported / d.total) * 100).toFixed(2)) : 0;
+  }
+
+  // Aggregate
+  const totalExtracted = Object.values(report.totals).reduce((a, t) => a + t.total, 0);
+  const totalUnsupported = Object.values(report.totals).reduce((a, t) => a + t.unsupported, 0);
+  const totalGrounded = Object.values(report.totals).reduce((a, t) => a + t.grounded, 0);
+
+  report.aggregate = {
+    meetings: meetings.length,
+    totalExtractedItems: totalExtracted,
+    totalUnsupportedItems: totalUnsupported,
+    totalGroundedItems: totalGrounded,
+    overallUnsupportedRatePercent: totalExtracted > 0
+      ? parseFloat(((totalUnsupported / totalExtracted) * 100).toFixed(2))
+      : 0,
+  };
+
+  report.notes = {
+    falseRejectionRate: 'NOT MEASURABLE - requires independently verified ground truth',
+    hallucinationAccuracy:
+      'This is NOT an accuracy metric. The 20% threshold is a lexical-overlap heuristic, not a validated measure of hallucination.',
+    rejectionBehavior:
+      `The implementation never removes items flagged as unsupported. All ${totalUnsupported} flagged items were KEPT in the final output.`,
+    keyObservation:
+      'The 20% threshold verified in code matches the paper claim. However, because the implementation only logs (never rejects), it cannot reduce false positives; it only serves as an audit signal.',
+  };
+
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  const outFile = path.join(RESULTS_DIR, 'grounding_benchmark.json');
+  fs.writeFileSync(outFile, JSON.stringify(report, null, 2));
+  console.log(JSON.stringify({ totals: report.totals, aggregate: report.aggregate, notes: report.notes }, null, 2));
+  console.log(`\n[SAVED] ${outFile}`);
+
+  await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Benchmark failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+----- run-pipeline-benchmark.js -----
+/**
+ * Pipeline Performance Benchmark
+ *
+ * Measures system-level performance metrics (NOT accuracy):
+ * - Audio duration from stored meeting data
+ * - Transcription time (from stored transcript processing records)
+ * - Diarization time (if available)
+ * - Embedding generation time
+ * - Indexing time
+ * - Retrieval latency (keyword)
+ * - RAG response time (end-to-end)
+ *
+ * Only reports what is MEASURABLE. Metrics that cannot be measured are
+ * reported as NOT_MEASURED.
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const mongoose = require('mongoose');
+const searchService = require('../services/search/search.service');
+const Meeting = require('../models/Meeting');
+const MeetingChunk = require('../models/MeetingChunk');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+
+async function main() {
+  console.log('============================================================');
+  console.log('  PIPELINE PERFORMANCE BENCHMARK');
+  console.log('============================================================');
+
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  const MeetingModel = mongoose.model('Meeting');
+  const MeetingChunkModel = mongoose.model('MeetingChunk');
+
+  const meetings = await MeetingModel.find({}).lean();
+  const completedMeetings = meetings.filter(m => m.status === 'completed');
+
+  const result = {
+    benchmark: 'pipeline_performance',
+    timestamp: new Date().toISOString(),
+    hardware: {
+      cpu: '12th Gen Intel(R) Core(TM) i5-12450H (12 cores)',
+      gpu: 'NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)',
+      ramGB: 16,
+      os: 'Windows 11',
+      node: process.version,
+    },
+    availableData: {
+      meetings: meetings.length,
+      completedMeetings: completedMeetings.length,
+    },
+    metrics: {},
+  };
+
+  // A. Audio duration (from stored data)
+  const durations = completedMeetings.map(m => m.duration);
+  result.metrics.audioDuration = {
+    status: 'MEASURED',
+    source: 'Meeting.duration (from transcription output)',
+    values_seconds: durations,
+    mean_s: durations.length ? parseFloat((durations.reduce((a,b)=>a+b,0)/durations.length).toFixed(2)) : 0,
+    min_s: durations.length ? Math.min(...durations) : 0,
+    max_s: durations.length ? Math.max(...durations) : 0,
+  };
+
+  // B. Transcription time: NOT directly recorded in DB (only completedAt date)
+  result.metrics.transcriptionTime = {
+    status: 'NOT_MEASURED',
+    reason: 'transcriptionCompletedAt timestamps stored, but processing start time not stored in DB.',
+    actualTickData: completedMeetings.map(m => ({
+      title: m.title,
+      transcriptionCompletedAt: m.transcriptionCompletedAt ? m.transcriptionCompletedAt.toISOString() : null,
+      createdAt: m.createdAt ? m.createdAt.toISOString() : null,
+    })),
+  };
+
+  // C. Diarization time: NOT recorded
+  const withSpeakerLabels = completedMeetings.filter(m => (m.transcriptSegments || []).some(s => s.speaker && s.speaker !== 'Unknown'));
+  result.metrics.diarization = {
+    status: 'NOT_MEASURED',
+    reason: 'Diarization time is not recorded as a separate stage in stored data.',
+    meetingsWithSpeakers: withSpeakerLabels.length,
+  };
+
+  // D-G. LLM extraction times: existing metrics from processing logs, not persisted
+  result.metrics.llmExtractionTimes = {
+    status: 'NOT_MEASURED_FROM_STORED_DATA',
+    reason: 'meeting.processor.js logs stage timings to console but does not persist them. Run run-extraction-benchmark.js for live measurements.',
+  };
+
+  // K-L. Embedding generation & indexing: measure from stored chunk data
+  const chunkCount = await MeetingChunkModel.countDocuments();
+  result.metrics.embeddingChunks = {
+    status: 'MEASURED',
+    totalChunks: chunkCount,
+    perMeeting: await Promise.all(completedMeetings.map(async m => {
+      const c = await MeetingChunkModel.countDocuments({ meetingId: m._id });
+      return { title: m.title, meetingId: m._id.toString(), chunks: c };
+    })),
+    embeddingModel: 'nomic-embed-text (768-dim, ollama)',
+    note: 'Generation time per chunk was logged at processing time but not persisted. Re-run embedding benchmark for live timing.',
+  };
+
+  // M. Retrieval latency: measure keyword search latency on real queries
+  const userId = completedMeetings[0]?.uploadedBy?.toString();
+  if (userId) {
+    const queries = ['deploy', 'security', 'meeting', 'project', 'decision'];
+    const retrievalTimings = [];
+    for (const q of queries) {
+      const start = Date.now();
+      try {
+        const res = await searchService.search(userId, { q, limit: 5 });
+        const elapsed = Date.now() - start;
+        retrievalTimings.push({
+          query: q,
+          executionTimeMs: elapsed,
+          returned: res.stats.returned,
+          total: res.stats.searchedMeetings,
+        });
+      } catch (e) {
+        retrievalTimings.push({ query: q, error: e.message });
+      }
+    }
+    result.metrics.retrievalLatency = {
+      status: 'MEASURED',
+      type: 'keyword_search',
+      runs: retrievalTimings,
+      note: 'Latency includes Mongo aggregation + snippet generation.',
+    };
+  } else {
+    result.metrics.retrievalLatency = { status: 'NOT_MEASURED', reason: 'No completed meetings found.' };
+  }
+
+  // N. RAG generation time: requires live Ollama call
+  result.metrics.ragGenerationTime = {
+    status: 'NOT_MEASURED_IN_THIS_RUN',
+    reason: 'Requires live Ollama call with RAG pipeline. Use run-rag-benchmark.js for live measurement.',
+  };
+
+  // O. End-to-end: computed only from sequential stages in DB where possible
+  result.metrics.endToEnd = {
+    status: 'PARTIALLY_MEASURED',
+    note: 'Completion status available, but per-stage timestamps not persisted.',
+    completedMeetings: completedMeetings.length,
+  };
+
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  const outFile = path.join(RESULTS_DIR, 'pipeline_metrics.json');
+  fs.writeFileSync(outFile, JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  console.log(`\n[SAVED] ${outFile}`);
+
+  await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch(err => {
+  console.error('Benchmark failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+----- run-rag-benchmark.js -----
+/**
+ * RAG Performance Benchmark
+ *
+ * Measures SYSTEM-LEVEL metrics (NOT answer accuracy):
+ * - retrieval latency
+ * - generation latency
+ * - end-to-end latency
+ * - number of retrieved chunks
+ * - context size (characters)
+ * - retrieval score distribution (if meaningful)
+ *
+ * Uses the actual production ragChat.service with a real question.
+ *
+ * IMPORTANT: No ground-truth QA labels exist, so answer accuracy is
+ * NOT measured. The benchmark reports system-level latency only.
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const mongoose = require('mongoose');
+const ragRetrieval = require('../services/ai/ragRetrieval.service');
+const Meeting = require('../models/Meeting');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+const RUNS = parseInt(process.env.RAG_BENCH_RUNS || '3', 10);
+
+const QUESTIONS = [
+  'What was decided about the cloud provider?',
+  'Who owns the security review actions?',
+  'What was discussed about car parking?',
+  'What are the main risks discussed?',
+  'How many people attended?',
+];
+
+async function main() {
+  console.log('============================================================');
+  console.log('  RAG PERFORMANCE BENCHMARK');
+  console.log('============================================================');
+
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  const meeting = await Meeting.findOne({ status: 'completed' }).lean();
+  if (!meeting) throw new Error('No completed meeting found.');
+  const userId = meeting.uploadedBy.toString();
+
+  const results = {
+    benchmark: 'rag_system_performance',
+    timestamp: new Date().toISOString(),
+    configuration: {
+      model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+      temperature: process.env.GENERATION_TEMPERATURE || '0.3',
+      retrievalTopK: process.env.RETRIEVAL_TOP_K || '10',
+      maxContextChars: process.env.RETRIEVAL_MAX_CONTEXT_CHARACTERS || '10000',
+      hardware: {
+        cpu: '12th Gen Intel(R) Core(TM) i5-12450H (12 cores)',
+        gpu: 'NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)',
+        ramGB: 16,
+        os: 'Windows 11',
+        node: process.version,
+      },
+    },
+    questions: [],
+    aggregate: {},
+  };
+
+  const ragChat = require('../services/ai/ragChat.service');
+
+  for (const question of QUESTIONS) {
+    const questionResults = {
+      question,
+      runs: [],
+    };
+
+    for (let r = 1; r <= RUNS; r++) {
+      console.log(`\n--- Question: "${question}" (run ${r}/${RUNS}) ---`);
+
+      // Measure retrieval-only latency
+      const retStart = Date.now();
+      const { chunks, totalChars, source } = await ragRetrieval.retrieveForChat({
+        question,
+        meetingId: 'all',
+        userId,
+      });
+      const retrievalTimeMs = Date.now() - retStart;
+
+      // Measure end-to-end RAG chat latency
+      const chatStart = Date.now();
+      const chatResult = await ragChat.chat({
+        question,
+        meetingId: 'all',
+        userId,
+        conversationHistory: [],
+      });
+      const endToEndMs = Date.now() - chatStart;
+
+      questionResults.runs.push({
+        run: r,
+        retrievalTimeMs,
+        generationTimeMs: endToEndMs - retrievalTimeMs,
+        endToEndMs,
+        chunksRetrieved: chunks.length,
+        contextChars: totalChars,
+        retrievalSource: source,
+        responseTimeMetadata: chatResult.metadata?.responseTime || 0,
+        answerLength: (chatResult.answer || '').length,
+      });
+
+      console.log(`  Retrieval: ${retrievalTimeMs}ms, Chunks: ${chunks.length}, Source: ${source}`);
+      console.log(`  End-to-end: ${endToEndMs}ms, Answer: ${(chatResult.answer || '').substring(0, 80)}...`);
+    }
+
+    results.questions.push(questionResults);
+  }
+
+  // Compute aggregates
+  const allRetrievalMsArr = [];
+  const allEndToEndMsArr = [];
+  const allChunksArr = [];
+
+  for (const q of results.questions) {
+    for (const run of q.runs) {
+      allRetrievalMsArr.push(run.retrievalTimeMs);
+      allEndToEndMsArr.push(run.endToEndMs);
+      allChunksArr.push(run.chunksRetrieved);
+    }
+  }
+
+  results.aggregate = {
+    retrievalMs: {
+      n: allRetrievalMsArr.length,
+      mean: allRetrievalMsArr.length ? parseFloat((allRetrievalMsArr.reduce((a, b) => a + b, 0) / allRetrievalMsArr.length).toFixed(1)) : 0,
+      min: allRetrievalMsArr.length ? Math.min(...allRetrievalMsArr) : 0,
+      max: allRetrievalMsArr.length ? Math.max(...allRetrievalMsArr) : 0,
+    },
+    endToEndMs: {
+      n: allEndToEndMsArr.length,
+      mean: allEndToEndMsArr.length ? parseFloat((allEndToEndMsArr.reduce((a, b) => a + b, 0) / allEndToEndMsArr.length).toFixed(1)) : 0,
+      min: allEndToEndMsArr.length ? Math.min(...allEndToEndMsArr) : 0,
+      max: allEndToEndMsArr.length ? Math.max(...allEndToEndMsArr) : 0,
+    },
+    chunksRetrieved: {
+      n: allChunksArr.length,
+      mean: allChunksArr.length ? parseFloat((allChunksArr.reduce((a, b) => a + b, 0) / allChunksArr.length).toFixed(1)) : 0,
+    },
+    disclaimer: 'System-level latency metrics only. Answer accuracy is NOT measured (no ground-truth QA labels exist).',
+  };
+
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  const outFile = path.join(RESULTS_DIR, 'rag_benchmark.json');
+  fs.writeFileSync(outFile, JSON.stringify(results, null, 2));
+  console.log('\n==== AGGREGATES ====');
+  console.log(JSON.stringify(results.aggregate, null, 2));
+  console.log(`\n[SAVED] ${outFile}`);
+  await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Benchmark failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+----- run-retrieval-benchmark.js -----
+/**
+ * Retrieval Evaluation Benchmark - Utility Assessment
+ *
+ * Determines whether retrieval effectiveness metrics (Precision@K, Recall@K,
+ * MRR, nDCG@K) can be legitimately computed from existing data.
+ *
+ * If no ground-truth relevance labels exist, this benchmark DOES NOT fabricate
+ * any. It reports what data is available and provides the evaluation harness
+ * ready for human-labeled data.
+ *
+ * The harness supports loading a labeled evaluation file (JSON) of the form:
+ * {
+ *   "queries": [
+ *     {
+ *       "query": "What was decided about cloud provider?",
+ *       "relevantMeetingIds": ["<meetingId1>", "<meetingId2>"],
+ *       "relevantChunkIds": ["<chunkId1>"]
+ *     }
+ *   ]
+ * }
+ *
+ * If the file exists at server/benchmarks/data/retrieval_ground_truth.json,
+ * the harness computes Precision@K, Recall@K, MRR, nDCG@K for:
+ * - Keyword-only search
+ * - Vector-only search (if Qdrant is available)
+ * - Hybrid RRF search (if Qdrant is available)
+ *
+ * If no ground truth file exists, the harness prints "NOT MEASURED / NOT AVAILABLE"
+ * and writes the benchmark specification for the user to manually label.
+ */
+
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const mongoose = require('mongoose');
+const searchService = require('../services/search/search.service');
+const rrfService = require('../services/search/rrf.service');
+const vectorSearchService = require('../services/search/vectorSearch.service');
+
+const RESULTS_DIR = path.join(__dirname, 'results');
+const GROUND_TRUTH_FILE = path.join(__dirname, 'data', 'retrieval_ground_truth.json');
+
+// ---------------------------------------------------------------------------
+// Evaluation metrics
+// ---------------------------------------------------------------------------
+function precisionAtK(retrievedIds, relevantIds, k) {
+  const topK = retrievedIds.slice(0, k);
+  if (!topK.length) return 0;
+  const hits = topK.filter((id) => relevantIds.includes(id)).length;
+  return hits / topK.length;
+}
+
+function recallAtK(retrievedIds, relevantIds, k) {
+  if (!relevantIds.length) return 0;
+  const topK = retrievedIds.slice(0, k);
+  const hits = topK.filter((id) => relevantIds.includes(id)).length;
+  return hits / relevantIds.length;
+}
+
+function reciprocalRank(retrievedIds, relevantIds) {
+  for (let i = 0; i < retrievedIds.length; i++) {
+    if (relevantIds.includes(retrievedIds[i])) return 1 / (i + 1);
+  }
+  return 0;
+}
+
+function dcgAtK(rankedIds, relevantIds, k) {
+  let dcg = 0;
+  for (let i = 0; i < Math.min(k, rankedIds.length); i++) {
+    const rel = relevantIds.includes(rankedIds[i]) ? 1 : 0;
+    dcg += rel / Math.log2(i + 2);
+  }
+  return dcg;
+}
+
+function idcgAtK(relevantCount, k) {
+  let idcg = 0;
+  for (let i = 0; i < Math.min(k, relevantCount); i++) {
+    idcg += 1 / Math.log2(i + 2);
+  }
+  return idcg;
+}
+
+function ndcgAtK(retrievedIds, relevantIds, k) {
+  const dcg = dcgAtK(retrievedIds, relevantIds, k);
+  const idcg = idcgAtK(relevantIds.length, k);
+  return idcg > 0 ? dcg / idcg : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+async function main() {
+  console.log('============================================================');
+  console.log('  RETRIEVAL EVALUATION BENCHMARK');
+  console.log('============================================================');
+
+  if (!fs.existsSync(GROUND_TRUTH_FILE)) {
+    console.log('\n[STATUS] No ground-truth relevance labels found at:');
+    console.log(`  ${GROUND_TRUTH_FILE}`);
+    console.log('\n[RESULT] Retrieval effectiveness metrics (P@K, Recall@K, MRR, nDCG)');
+    console.log('         CANNOT currently be computed because no ground-truth');
+    console.log('         relevance judgments are available.');
+    console.log('\n[WHAT IS AVAILABLE]');
+    console.log('  - 3 completed meetings with transcripts in MongoDB');
+    console.log('  - 96 stored embedding chunks (768-dim, nomic-embed-text, ollama)');
+    console.log('  - Keyword search service (working)');
+    console.log('  - RRF hybrid search service (vector path requires Qdrant)');
+    console.log('  - Qdrant: NOT RUNNING (vector & true hybrid paths unavailable)');
+
+    console.log('\n[BENCHMARK SPECIFICATION FOR MANUAL LABELING]');
+    console.log('To enable retrieval evaluation, create a file at:');
+    console.log(`  ${GROUND_TRUTH_FILE}`);
+    console.log('with this structure:');
+    console.log(`\n{
+  "queries": [
+    {
+      "id": "q1",
+      "query": "What was decided about the cloud provider?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"],
+      "relevantChunkIds": ["<chunkId1>", "<chunkId2>"]
+    },
+    {
+      "id": "q2",
+      "query": "Who was assigned the security review?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    }
+  ]
+}`);
+    console.log('\n  Recommended minimum: 50 queries across the 3 real meetings,');
+    console.log('  with binary relevance labels (relevant/not-relevant).');
+
+    // Write the benchmark spec file
+    fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+    const defaultSpec = {
+      description: 'Ground-truth retrieval eval label file - MANUALLY COMPLETE THIS FILE',
+      created: new Date().toISOString(),
+      instructions: [
+        'Write 50 realistic questions that a meeting participant might ask.',
+        'For each query, list the meeting IDs (and optionally chunk IDs) that contain the answer.',
+        'Use only the 3 meetings present in MongoDB.',
+        'Relevant = the answer is contained in that meeting document.',
+      ],
+      meetings: [
+        { id: '6a858288ccc5a9004c310f2e', title: 'Tamil audio (265s, 742 words)' },
+        { id: '6a608b2380c69cbd4caa84e0', title: 'Sec Growth DataScience (1743s, 4647 words)' },
+        { id: '6a6080b544f271a027b565fd', title: 'Effective Meetings Simulated Exercise (849s, 2598 words)' },
+      ],
+      queries: [],
+    };
+    const specPath = path.join(__dirname, 'data', 'retrieval_ground_truth.json');
+    fs.writeFileSync(specPath, JSON.stringify(defaultSpec, null, 2));
+
+    const result = {
+      benchmark: 'retrieval_evaluation',
+      timestamp: new Date().toISOString(),
+      status: 'NOT_MEASURED',
+      reason: 'No ground-truth relevance judgments available.',
+      availableData: {
+        meetings: 3,
+        chunks: 96,
+        keywordSearch: true,
+        vectorSearch: 'requires Qdrant (not running)',
+        hybridRRF: 'vector path unavailable',
+      },
+      benchmarkSpecFile: specPath,
+    };
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(RESULTS_DIR, 'retrieval_benchmark.json'), JSON.stringify(result, null, 2));
+    console.log('\n[RESULT SAVED] server/benchmarks/results/retrieval_benchmark.json');
+    process.exit(0);
+  }
+
+  // Ground truth file exists - check if it has labeled queries
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+  const gt = JSON.parse(fs.readFileSync(GROUND_TRUTH_FILE, 'utf8'));
+  const queries = (gt.queries || []).filter((q) => q.query && (q.relevantMeetingIds || []).length > 0);
+
+  if (queries.length === 0) {
+    console.log('\n[STATUS] Ground truth file exists but has no labeled queries.');
+    console.log('[RESULT] Retrieval effectiveness metrics CANNOT be computed: 0 labeled queries.');
+    console.log('         The file is a template that requires MANUAL annotation.');
+
+    const result = {
+      benchmark: 'retrieval_evaluation',
+      timestamp: new Date().toISOString(),
+      status: 'NOT_MEASURED',
+      reason: 'Ground-truth label file exists but contains 0 labeled queries (template only). Manual labeling required.',
+      benchmarkSpecFile: GROUND_TRUTH_FILE,
+    };
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(RESULTS_DIR, 'retrieval_benchmark.json'), JSON.stringify(result, null, 2));
+    console.log('[SAVED] server/benchmarks/results/retrieval_benchmark.json');
+    await mongoose.disconnect();
+    process.exit(0);
+  }
+
+  console.log(`\n[STATUS] Ground truth loaded: ${queries.length} queries`);
+
+  // Find a real user to run searches as
+  const MeetingModel = mongoose.model('Meeting');
+  const anyMeeting = await MeetingModel.findOne({ status: 'completed' }).lean();
+  if (!anyMeeting) {
+    console.log('No completed meeting found to identify user.');
+    process.exit(1);
+  }
+  const userId = anyMeeting.uploadedBy.toString();
+
+  const evaluators = {
+    keyword: async (q) => {
+      const res = await searchService.search(userId, { q, limit: 10 });
+      return res.results.map((r) => r.meetingId.toString());
+    },
+    vector: async (q) => {
+      try {
+        const res = await vectorSearchService.search(q, { limit: 10 });
+        return (res.results || []).map((r) => r.meetingId.toString());
+      } catch (e) {
+        return [];
+      }
+    },
+    hybrid: async (q) => {
+      try {
+        const res = await rrfService.hybridSearch(userId, { q, limit: 10 });
+        return (res.results || []).map((r) => (r.meetingId || '').toString());
+      } catch (e) {
+        return [];
+      }
+    },
+  };
+
+  const kValues = [1, 3, 5, 10];
+  const summary = { keyword: {}, vector: {}, hybrid: {} };
+
+  for (const method of Object.keys(evaluators)) {
+    const fn = evaluators[method];
+    const pAtK = {};
+    const rAtK = {};
+    const ndcgAtKAll = {};
+    const mrrValues = [];
+
+    for (const k of kValues) {
+      pAtK['P@' + k] = [];
+      rAtK['R@' + k] = [];
+      ndcgAtKAll['nDCG@' + k] = [];
+    }
+
+    for (const query of queries) {
+      const relevant = (query.relevantMeetingIds || []).map(String);
+      let retrieved;
+      try {
+        retrieved = (await fn(query.query)).map(String);
+      } catch (e) {
+        retrieved = [];
+      }
+
+      for (const k of kValues) {
+        pAtK['P@' + k].push(precisionAtK(retrieved, relevant, k));
+        rAtK['R@' + k].push(recallAtK(retrieved, relevant, k));
+        ndcgAtKAll['nDCG@' + k].push(ndcgAtK(retrieved, relevant, k));
+      }
+      mrrValues.push(reciprocalRank(retrieved, relevant));
+    }
+
+    summary[method] = {};
+    for (const k of kValues) {
+      const pKey = 'P@' + k;
+      const rKey = 'R@' + k;
+      const nKey = 'nDCG@' + k;
+      summary[method][pKey] = pAtK[pKey].length
+        ? parseFloat((pAtK[pKey].reduce((a, b) => a + b, 0) / pAtK[pKey].length).toFixed(4))
+        : 0;
+      summary[method][rKey] = rAtK[rKey].length
+        ? parseFloat((rAtK[rKey].reduce((a, b) => a + b, 0) / rAtK[rKey].length).toFixed(4))
+        : 0;
+      summary[method][nKey] = ndcgAtKAll[nKey].length
+        ? parseFloat((ndcgAtKAll[nKey].reduce((a, b) => a + b, 0) / ndcgAtKAll[nKey].length).toFixed(4))
+        : 0;
+    }
+    summary[method].MRR = mrrValues.length
+      ? parseFloat((mrrValues.reduce((a, b) => a + b, 0) / mrrValues.length).toFixed(4))
+      : 0;
+  }
+
+  const result = {
+    benchmark: 'retrieval_evaluation',
+    timestamp: new Date().toISOString(),
+    status: 'MEASURED',
+    nQueries: queries.length,
+    kValues,
+    methods: summary,
+  };
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(RESULTS_DIR, 'retrieval_benchmark.json'), JSON.stringify(result, null, 2));
+  console.log('\n[RESULTS]');
+  console.log(JSON.stringify(summary, null, 2));
+  console.log('[SAVED] server/benchmarks/results/retrieval_benchmark.json');
+  await mongoose.disconnect();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Benchmark failed:', err);
+  if (mongoose.connection.readyState === 1) mongoose.disconnect();
+  process.exit(1);
+});
+
+
+
+========== 6. GROUND TRUTH FILES ==========
+
+----- extraction_ground_truth.json -----
+{
+  "meetingId": "6a6080b544f271a027b565fd",
+  "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking",
+
+  "decisions": [
+    "Send an email to all staff advising them about priority parking",
+    "Allocate two car parking spaces to Sue and Jason",
+    "Put up a sign with Jason's name on it indicating his parking space",
+    "Hold a meeting between Rita and Sue to discuss low staff morale issues",
+    "Run the training idea past Clive before the next meeting",
+    "Have an effective communication skills course for Frank"
+  ],
+
+  "actionItems": [
+    {
+      "task": "Send an email to all staff advising them about priority parking",
+      "owner": "Jason Somerville",
+      "deadline": "Immediately"
+    },
+    {
+      "task": "Put up signs in the car park indicating priority spaces",
+      "owner": "Jason Somerville",
+      "deadline": "Immediately"
+    },
+    {
+      "task": "Discuss staff morale issues",
+      "owner": "Sue Carpenter and Julian Gettys",
+      "deadline": "Next meeting"
+    },
+    {
+      "task": "Run the training idea past Clive",
+      "owner": "Julian Gettys",
+      "deadline": "In the next two weeks"
+    },
+    {
+      "task": "Send a questionnaire to staff about issues affecting morale",
+      "owner": "Lucy Strokes and Sue Carpenter",
+      "deadline": "Immediately"
+    },
+    {
+      "task": "Address the financial report discrepancies",
+      "owner": "Julian Gettys, Dave, Frank Lyons",
+      "deadline": "Next meeting"
+    },
+    {
+      "task": "Address cleanliness issues in the kitchen and shower room",
+      "owner": "All team members",
+      "deadline": "Next meeting"
+    }
+  ],
+
+  "risks": [
+    "Low staff morale in certain departments",
+    "Arguments and fights over car parking spaces"
+  ],
+
+  "questions": {
+    "unanswered": [
+      "What are the IT issues?"
+    ]
+  }
+}
+
+
+----- extraction_ground_truth_sec_growth.json -----
+{
+  "title": "SICK - Secure and Govern Growth and Data Science Team Meeting",
+  "meetingId": "6a608b2380c69cbd4caa84e0",
+  "decisions": [
+    "Allen has been appointed as acting full-stack manager for security policies.",
+    "Anti-abuse is being moved into the data science section, with data science becoming the renamed section covering the existing model ops and anti-abuse groups.",
+    "A second team will be established within dynamic analysis without creating a new group, with the split based on feature categories.",
+    "The development team will close the MR-rate improvement issue and link the meeting notes.",
+    "The team will continue using the existing Google Docs for talent assessments until Workday access and the exact process are available.",
+    "The team will use the engineering project/team member handbook entries as the source for maintainer information rather than relying solely on reviewer roulette."
+  ],
+  "actionItems": [
+    {
+      "task": "Compile and report on team allocations, error budgets, reliability, and security incidents.",
+      "owner": "Thomas and Neil",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Continue working through the handbook and organizational changes associated with moving anti-abuse into data science.",
+      "owner": "Mon",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Set up and maintain the container security bot that weekly asks the team for volunteers to resource the required data.",
+      "owner": "Tiago",
+      "deadline": "Weekly"
+    },
+    {
+      "task": "Report back on interview refinement changes.",
+      "owner": "J",
+      "deadline": "End of the quarter"
+    },
+    {
+      "task": "Continue experimenting with refinement meetings and smaller work items to improve engineering velocity and MR rate.",
+      "owner": "Engineering team",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Brainstorm and discuss options for handling security findings related to commercial analyzer versions, including deviation requests and bulk fixes.",
+      "owner": "Thomas and team",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Run the proposed 'Enrichment' team name past David de Santo and determine whether organizational approval is required.",
+      "owner": "Thomas",
+      "deadline": "Tomorrow"
+    },
+    {
+      "task": "Add announcements for work anniversaries and new hires to the meeting template.",
+      "owner": "Thomas and team",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Provide feedback on the development vision, mission, and direction.",
+      "owner": "All interested team members",
+      "deadline": "Next week"
+    },
+    {
+      "task": "Add maintainers to individual team-member YAML files in the handbook for projects that require them.",
+      "owner": "Seth",
+      "deadline": "Not specified"
+    }
+  ],
+  "risks": [
+    "Security issues associated with dependency and container scanning may require remediation plans for FedRAMP-compliant or certified feature categories, including cases involving false positives or projects that do not provide fixes.",
+    "Changes to team structure, approvals, security processes, and maintainer requirements may create additional coordination overhead or delays."
+  ],
+  "questions": {
+    "answered": [
+      "What are you going to call your new team or how will you differentiate?",
+      "Can folks check with their teams to see if the new approval rules are affecting them?",
+      "Do you have any thoughts on renaming the team to 'enrichment'?"
+    ],
+    "unanswered": [
+      "Why are you here when it's midnight?",
+      "How do you plan to improve the signal and noise ratio in communications?",
+      "What is the story behind what is going on with reliability or security incidents?"
+    ]
+  }
+}
+
+
+----- retrieval_ground_truth.json -----
+{
+  "description": "Ground-truth retrieval eval label file - MANUALLY COMPLETE THIS FILE",
+  "created": "2026-08-19T18:49:29.851Z",
+  "instructions": [
+    "Write 50 realistic questions that a meeting participant might ask.",
+    "For each query, list the meeting IDs (and optionally chunk IDs) that contain the answer.",
+    "Use only the 3 meetings present in MongoDB.",
+    "Relevant = the answer is contained in that meeting document."
+  ],
+  "meetings": [
+    {
+      "id": "6a858288ccc5a9004c310f2e",
+      "title": "Tamil audio (265s, 742 words)"
+    },
+    {
+      "id": "6a608b2380c69cbd4caa84e0",
+      "title": "Sec Growth DataScience (1743s, 4647 words)"
+    },
+    {
+      "id": "6a6080b544f271a027b565fd",
+      "title": "Effective Meetings Simulated Exercise (849s, 2598 words)"
+    }
+  ],
+  "queries": []
+}
+
+
+========== 7. PACKAGE VERSIONS ==========
+{
+  "name": "meeting-intelligence-server",
+  "version": "1.0.0",
+  "description": "AI Meeting Intelligence System - Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@qdrant/js-client-rest": "^1.18.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.0",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.4",
+    "multer": "^2.2.0",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.3",
+    "ollama": "^0.6.3",
+    "uuid": "^14.0.1"
+  }
+}
+
+
+========== 8. EXISTING EXPERIMENT RESULTS ==========
+
+----- embedding_benchmark.json -----
+{
+  "benchmark": "embedding_system_performance",
+  "timestamp": "2026-08-19T18:56:11.918Z",
+  "configuration": {
+    "embeddingModel": "nomic-embed-text",
+    "provider": "ollama",
+    "chunkSizeMax": 500,
+    "batchSize": 1,
+    "hardware": {
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "chunking": {
+    "transcriptChars": 14112,
+    "chunksCreated": 31,
+    "chunkTimeMs": 6,
+    "avgChunkChars": 455.2
+  },
+  "embedding": {
+    "sampledChunks": 20,
+    "success": 20,
+    "failures": 0,
+    "perChunkTimesMs": [
+      3313,
+      124,
+      78,
+      105,
+      72,
+      70,
+      78,
+      74,
+      85,
+      75,
+      76,
+      71,
+      77,
+      72,
+      78,
+      99,
+      95,
+      94,
+      86,
+      80
+    ],
+    "meanPerChunkMs": 245.1,
+    "minPerChunkMs": 70,
+    "maxPerChunkMs": 3313
+  },
+  "disclaimer": "SYSTEM PERFORMANCE ONLY - NOT an accuracy metric."
+}
+
+----- extraction_accuracy.json -----
+{
+  "benchmark": "multi_meeting_extraction_accuracy",
+  "timestamp": "2026-10-06T05:39:14.155Z",
+  "datasetCount": 2,
+  "meetings": [
+    {
+      "meeting": {
+        "id": "6a6080b544f271a027b565fd",
+        "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 6,
+          "truePositive": 6,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "actionItems": {
+          "expected": 7,
+          "predicted": 7,
+          "truePositive": 6,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.8571,
+          "recall": 0.8571,
+          "f1": 0.8571
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 1,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1": 0.5
+        },
+        "unansweredQuestions": {
+          "expected": 1,
+          "predicted": 1,
+          "truePositive": 1,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    },
+    {
+      "meeting": {
+        "id": "6a608b2380c69cbd4caa84e0",
+        "title": "SICK - Secure and Govern Growth and Data Science Team Meeting"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 4,
+          "truePositive": 1,
+          "falsePositive": 3,
+          "falseNegative": 5,
+          "precision": 0.25,
+          "recall": 0.1667,
+          "f1": 0.2
+        },
+        "actionItems": {
+          "expected": 10,
+          "predicted": 9,
+          "truePositive": 6,
+          "falsePositive": 3,
+          "falseNegative": 4,
+          "precision": 0.6667,
+          "recall": 0.6,
+          "f1": 0.6316
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 0,
+          "falsePositive": 2,
+          "falseNegative": 2,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0
+        },
+        "unansweredQuestions": {
+          "expected": 3,
+          "predicted": 3,
+          "truePositive": 3,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    }
+  ],
+  "overall": {
+    "decisions": {
+      "expected": 12,
+      "predicted": 10,
+      "truePositive": 7,
+      "falsePositive": 3,
+      "falseNegative": 5,
+      "precision": 0.7,
+      "recall": 0.5833,
+      "f1": 0.6364
+    },
+    "actionItems": {
+      "expected": 17,
+      "predicted": 16,
+      "truePositive": 12,
+      "falsePositive": 4,
+      "falseNegative": 5,
+      "precision": 0.75,
+      "recall": 0.7059,
+      "f1": 0.7273
+    },
+    "risks": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 1,
+      "falsePositive": 3,
+      "falseNegative": 3,
+      "precision": 0.25,
+      "recall": 0.25,
+      "f1": 0.25
+    },
+    "unansweredQuestions": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 4,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "macroAverage": {
+      "precision": 0.675,
+      "recall": 0.6348,
+      "f1": 0.6534
+    }
+  },
+  "methodology": {
+    "matching": "Token Jaccard similarity",
+    "similarityThreshold": 0.5,
+    "averaging": "Micro-average across meetings for each extraction category; macro-average across the four categories",
+    "metrics": [
+      "Precision",
+      "Recall",
+      "F1"
+    ],
+    "note": "Ground truth was manually annotated from the meeting transcripts. Benchmark evaluates extraction quality only and does not modify production extraction code."
+  }
+}
+
+----- extraction_benchmark_2026-08-19T18-35-23-642Z.json -----
+{
+  "benchmark": "extraction_parallel_vs_sequential",
+  "timestamp": "2026-08-19T18:35:23.644Z",
+  "runId": "2026-08-19T18-35-23-642Z",
+  "configuration": {
+    "model": "qwen2.5:7b",
+    "temperature": "0",
+    "num_ctx": "8192",
+    "maxChars": 24000,
+    "source": "db",
+    "transcriptId": "largest_in_db",
+    "numStages": 9,
+    "hardware": {
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "runs": [
+    {
+      "runNumber": 1,
+      "transcriptChars": 24029,
+      "sequential": {
+        "wallClockMs": 490289,
+        "sumStageInferenceMs": 490265,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 86957,
+            "validationTime_ms": 0,
+            "totalTime_ms": 86957,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 60601,
+            "validationTime_ms": 1,
+            "totalTime_ms": 60602,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 28403,
+            "validationTime_ms": 8,
+            "totalTime_ms": 28411,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 143472,
+            "validationTime_ms": 6,
+            "totalTime_ms": 143478,
+            "status": "Success"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 15132,
+            "validationTime_ms": 3,
+            "totalTime_ms": 15135,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 35162,
+            "validationTime_ms": 5,
+            "totalTime_ms": 35167,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 63343,
+            "validationTime_ms": 0,
+            "totalTime_ms": 63343,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 18512,
+            "validationTime_ms": 1,
+            "totalTime_ms": 18513,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 38683,
+            "validationTime_ms": 0,
+            "totalTime_ms": 38683,
+            "status": "Success"
+          }
+        ]
+      },
+      "parallel": {
+        "wallClockMs": 306385,
+        "sumStageInferenceMs": 306385,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 58101,
+            "validationTime_ms": 0,
+            "totalTime_ms": 58101,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 306381,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306381,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 207099,
+            "validationTime_ms": 3,
+            "totalTime_ms": 207102,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 306379,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306379,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 179134,
+            "validationTime_ms": 2,
+            "totalTime_ms": 179136,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 306381,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306381,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 165492,
+            "validationTime_ms": 0,
+            "totalTime_ms": 165492,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 306382,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306382,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 95482,
+            "validationTime_ms": 0,
+            "totalTime_ms": 95482,
+            "status": "Success"
+          }
+        ]
+      },
+      "speedup": 1.6,
+      "latencyReductionPercent": 37.51
+    }
+  ],
+  "aggregate": {
+    "sequential": {
+      "n": 1,
+      "mean_ms": 490289,
+      "median_ms": 490289,
+      "min_ms": 490289,
+      "max_ms": 490289,
+      "stddev_ms": 0
+    },
+    "parallel": {
+      "n": 1,
+      "mean_ms": 306385,
+      "median_ms": 306385,
+      "min_ms": 306385,
+      "max_ms": 306385,
+      "stddev_ms": 0
+    },
+    "speedup": {
+      "n": 1,
+      "mean_x": 1.6,
+      "median_x": 1.6,
+      "min_x": 1.6,
+      "max_x": 1.6
+    },
+    "latencyReductionPercent": {
+      "n": 1,
+      "mean_pct": 37.51,
+      "median_pct": 37.51,
+      "min_pct": 37.51,
+      "max_pct": 37.51
+    }
+  },
+  "speedupFormula": "speedup = sequential_wall_clock / parallel_wall_clock",
+  "latencyReductionFormula": "latency_reduction_pct = ((seq - par) / seq) * 100",
+  "disclaimer": "These are SYNTHETIC BENCHMARK measurements of LLM inference wall-clock latency for software throughput comparison. They are NOT model accuracy metrics."
+}
+
+----- extraction_quality.json -----
+{
+  "benchmark": "extraction_quality_assessment",
+  "timestamp": "2026-08-19T18:58:38.148Z",
+  "status": "NOT_MEASURED",
+  "reason": "No annotated reference labels (ground truth) exist for extraction quality evaluation.",
+  "evidence": {
+    "referenceSummaries": "NOT FOUND - no reference summary data exists in repository",
+    "expectedDecisions": "NOT FOUND - no gold-standard decision labels",
+    "expectedActionItems": "NOT FOUND - no gold-standard action item labels",
+    "expectedRisks": "NOT FOUND - no gold-standard risk labels",
+    "annotatedTranscripts": "NOT FOUND - test/stt/ directories are empty",
+    "manuallyVerifiedOutputs": "NOT FOUND - no verified meeting outputs in repository",
+    "testFixtures": "NOT FOUND - no test fixtures for extraction quality"
+  },
+  "whatExists": {
+    "meetings": 3,
+    "extractedDecisions": 10,
+    "extractedActionItems": 17,
+    "extractedRisks": 4,
+    "note": "Extraction outputs exist but no labeled gold-standard to compare them against."
+  },
+  "recommendation": {
+    "minimumManualVerificationSet": [
+      "Manually verify 5 meetings x ~10 extracted items = ~50 action items across the 3 real meetings.",
+      "Label each extracted item as: correct, partially-correct, incorrect, missed (gold standard).",
+      "After labeling, compute token/partial matching P/R/F1 using the benchmark harness."
+    ],
+    "requiredFile": "server/benchmarks/data/extraction_ground_truth.json"
+  }
+}
+
+----- grounding_benchmark.json -----
+{
+  "benchmark": "transcript_grounding_evaluation",
+  "timestamp": "2026-08-19T18:50:24.400Z",
+  "implementation": {
+    "file": "server/services/ai/validators/meetingSchema.js",
+    "method": "verifySemanticMatch",
+    "threshold": 0.2,
+    "behavior": "LOGS FAILURES BUT KEEPS ITEMS â€” \"Kept to prevent data loss\". No items are ever rejected at runtime."
+  },
+  "meetings": [
+    {
+      "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+      "meetingId": "6a6080b544f271a027b565fd",
+      "decisions": {
+        "total": 6,
+        "grounded": 6,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Send an email advising staff about priority parking",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "Allocate two car parking spaces to Sue and Jason",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 4
+          },
+          {
+            "text": "Put up a sign with Jason's name on it indicating his parking space",
+            "matchRatio": 0.7143,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 7
+          },
+          {
+            "text": "Hold a meeting between Rita and Sue to discuss low staff morale issues",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Run the training idea past Clive before the next meeting",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "Have an effective communication skills course for Frank",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 6
+          }
+        ]
+      },
+      "actionItems": {
+        "total": 7,
+        "grounded": 7,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Send an email to all staff advising them about priority parking",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Put up signs in the car park indicating priority spaces",
+            "matchRatio": 0.6,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 5
+          },
+          {
+            "text": "Hold a meeting with Sue and Julian to discuss staff morale issues",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Run the idea of training for IT issues past Clive",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 5
+          },
+          {
+            "text": "Create and send out a questionnaire to staff about issues affecting morale",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 8
+          },
+          {
+            "text": "Address the financial report discrepancies with Gary Cope's input",
+            "matchRatio": 0.625,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 8
+          },
+          {
+            "text": "Schedule a cleaning task for the next meeting to address cleanliness issues in the kitchen and shower room",
+            "matchRatio": 0.8182,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 11
+          }
+        ]
+      },
+      "risks": {
+        "total": 2,
+        "grounded": 2,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "There is a growing concern about low staff morale in certain departments.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "There have been arguments and fights over car parking spaces due to the new office layout.",
+            "matchRatio": 0.9,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 10
+          }
+        ]
+      },
+      "answeredQuestions": {
+        "total": 5,
+        "grounded": 5,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Are you saying there is a problem with car parking?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 5
+          },
+          {
+            "text": "What happens if one of them is off-sick?",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 4
+          },
+          {
+            "text": "Is there one thing about that?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 4
+          },
+          {
+            "text": "What do you think?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          },
+          {
+            "text": "Can I just say... There's a little bit in there.",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 4
+          }
+        ]
+      },
+      "unansweredQuestions": {
+        "total": 1,
+        "grounded": 1,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "What are the IT issues?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          }
+        ]
+      }
+    },
+    {
+      "title": "Sec Growth DataScience",
+      "meetingId": "6a608b2380c69cbd4caa84e0",
+      "decisions": {
+        "total": 4,
+        "grounded": 4,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Allen has been appointed as acting full-stack manager for security policies.",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 8
+          },
+          {
+            "text": "The anti-abuse stage within the data science section is being renamed to simply 'data science', with plans to potentially split it into two groups in the future.",
+            "matchRatio": 0.7222,
+            "matched": true,
+            "matchedWords": 13,
+            "totalWords": 18
+          },
+          {
+            "text": "A second team will be established within dynamic analysis, and Thomas will serve as a team factor for this new team.",
+            "matchRatio": 0.8571,
+            "matched": true,
+            "matchedWords": 12,
+            "totalWords": 14
+          },
+          {
+            "text": "The name of the secure growth and data science team may be changed to 'enrichment' but no final decision has been made.",
+            "matchRatio": 0.75,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 12
+          }
+        ]
+      },
+      "actionItems": {
+        "total": 9,
+        "grounded": 9,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Compile and report on team allocations, error budgets, and reliability and security incidents.",
+            "matchRatio": 0.8889,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 9
+          },
+          {
+            "text": "Set up a bot for container security that weekly pings the team to volunteer for data resource.",
+            "matchRatio": 0.8889,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 9
+          },
+          {
+            "text": "Enable the threat insights bot.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "Report back on interview refinement by the end of the quarter.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 5,
+            "totalWords": 5
+          },
+          {
+            "text": "Brainstorm and discuss options for handling security findings related to commercial versions of analyzer specifically regarding deviation requests and bulk fixes.",
+            "matchRatio": 0.8125,
+            "matched": true,
+            "matchedWords": 13,
+            "totalWords": 16
+          },
+          {
+            "text": "Rename the team name from 'Secure Growth and Data Science' to a one-word name like 'Enrichment'.",
+            "matchRatio": 0.9167,
+            "matched": true,
+            "matchedWords": 11,
+            "totalWords": 12
+          },
+          {
+            "text": "Add announcements of work anniversaries and new hires to the meeting template.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 6
+          },
+          {
+            "text": "Provide feedback on the development vision, mission, and direction.",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 6,
+            "totalWords": 6
+          },
+          {
+            "text": "Add maintainers to individual team member yamato files in the handbook for projects that require it.",
+            "matchRatio": 0.9,
+            "matched": true,
+            "matchedWords": 9,
+            "totalWords": 10
+          }
+        ]
+      },
+      "risks": {
+        "total": 2,
+        "grounded": 0,
+        "unsupported": 2,
+        "items": [
+          {
+            "text": "Risk 1",
+            "matchRatio": 0,
+            "matched": false,
+            "matchedWords": 0,
+            "totalWords": 1
+          },
+          {
+            "text": "Risk 2",
+            "matchRatio": 0,
+            "matched": false,
+            "matchedWords": 0,
+            "totalWords": 1
+          }
+        ]
+      },
+      "answeredQuestions": {
+        "total": 3,
+        "grounded": 3,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "What are you going to call your new team or how will you differentiate?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "Can folks check with their teams to see if the approvals are affecting them?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 8
+          },
+          {
+            "text": "Do you have any thoughts on renaming the team to 'enrichment'?",
+            "matchRatio": 0.8,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 5
+          }
+        ]
+      },
+      "unansweredQuestions": {
+        "total": 3,
+        "grounded": 3,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Why are you here when it's midnight?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "How do you plan to improve the signal and noise ratio in your communications?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 7,
+            "totalWords": 7
+          },
+          {
+            "text": "What is the story behind what's going on with reliability or security incidents?",
+            "matchRatio": 0.8889,
+            "matched": true,
+            "matchedWords": 8,
+            "totalWords": 9
+          }
+        ]
+      }
+    },
+    {
+      "title": "Tamil audio",
+      "meetingId": "6a858288ccc5a9004c310f2e",
+      "decisions": {
+        "total": 0,
+        "grounded": 0,
+        "unsupported": 0,
+        "items": []
+      },
+      "actionItems": {
+        "total": 1,
+        "grounded": 1,
+        "unsupported": 0,
+        "items": [
+          {
+            "text": "Go to a conference in Bangalore",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          }
+        ]
+      },
+      "risks": {
+        "total": 0,
+        "grounded": 0,
+        "unsupported": 0,
+        "items": []
+      },
+      "answeredQuestions": {
+        "total": 0,
+        "grounded": 0,
+        "unsupported": 0,
+        "items": []
+      },
+      "unansweredQuestions": {
+        "total": 8,
+        "grounded": 7,
+        "unsupported": 1,
+        "items": [
+          {
+            "text": "What is Mr. Vetham?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          },
+          {
+            "text": "Where are you?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 1,
+            "totalWords": 1
+          },
+          {
+            "text": "Who might come back?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "Why are you trying to figure out anything wrong?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 4,
+            "totalWords": 4
+          },
+          {
+            "text": "Why do you want to come to watch?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "What's up?",
+            "matchRatio": 0,
+            "matched": false,
+            "matchedWords": 0,
+            "totalWords": 1
+          },
+          {
+            "text": "Where are you going to Bangalore?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 3,
+            "totalWords": 3
+          },
+          {
+            "text": "What is the new program?",
+            "matchRatio": 1,
+            "matched": true,
+            "matchedWords": 2,
+            "totalWords": 2
+          }
+        ]
+      }
+    }
+  ],
+  "totals": {
+    "decisions": {
+      "total": 10,
+      "grounded": 10,
+      "unsupported": 0,
+      "rate": 0
+    },
+    "actionItems": {
+      "total": 17,
+      "grounded": 17,
+      "unsupported": 0,
+      "rate": 0
+    },
+    "risks": {
+      "total": 4,
+      "grounded": 2,
+      "unsupported": 2,
+      "rate": 50
+    },
+    "answeredQuestions": {
+      "total": 8,
+      "grounded": 8,
+      "unsupported": 0,
+      "rate": 0
+    },
+    "unansweredQuestions": {
+      "total": 12,
+      "grounded": 11,
+      "unsupported": 1,
+      "rate": 8.33
+    }
+  },
+  "aggregate": {
+    "meetings": 3,
+    "totalExtractedItems": 51,
+    "totalUnsupportedItems": 3,
+    "totalGroundedItems": 48,
+    "overallUnsupportedRatePercent": 5.88
+  },
+  "notes": {
+    "falseRejectionRate": "NOT MEASURABLE - requires independently verified ground truth",
+    "hallucinationAccuracy": "This is NOT an accuracy metric. The 20% threshold is a lexical-overlap heuristic, not a validated measure of hallucination.",
+    "rejectionBehavior": "The implementation never removes items flagged as unsupported. All 3 flagged items were KEPT in the final output.",
+    "keyObservation": "The 20% threshold verified in code matches the paper claim. However, because the implementation only logs (never rejects), it cannot reduce false positives; it only serves as an audit signal."
+  }
+}
+
+----- paper_experiment_report.json -----
+{
+  "generatedAt": "2026-10-06T05:37:47.194Z",
+  "system": {
+    "node": "v22.14.0",
+    "platform": "win32",
+    "architecture": "x64"
+  },
+  "dataset": {
+    "meetings": 3,
+    "transcriptWords": 7987,
+    "transcriptCharacters": 42248
+  },
+  "extractionTotals": {
+    "decisions": 10,
+    "actionItems": 17,
+    "risks": 4,
+    "unansweredQuestions": 12
+  },
+  "meetings": [
+    {
+      "id": "6a858288ccc5a9004c310f2e",
+      "title": "Tamil audio",
+      "language": "en",
+      "duration": 265.31,
+      "words": 742,
+      "transcriptChars": 3826,
+      "decisions": 0,
+      "actionItems": 1,
+      "risks": 0,
+      "unansweredQuestions": 8,
+      "createdAt": "2026-08-19T10:16:41.018Z"
+    },
+    {
+      "id": "6a608b2380c69cbd4caa84e0",
+      "title": "Sec Growth DataScience",
+      "language": "en",
+      "duration": 1743.47,
+      "words": 4647,
+      "transcriptChars": 24310,
+      "decisions": 4,
+      "actionItems": 9,
+      "risks": 2,
+      "unansweredQuestions": 3,
+      "createdAt": "2026-07-22T09:19:31.418Z"
+    },
+    {
+      "id": "6a6080b544f271a027b565fd",
+      "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+      "language": "en",
+      "duration": 849.61,
+      "words": 2598,
+      "transcriptChars": 14112,
+      "decisions": 6,
+      "actionItems": 7,
+      "risks": 2,
+      "unansweredQuestions": 1,
+      "createdAt": "2026-07-22T08:35:01.478Z"
+    }
+  ]
+}
+
+----- pipeline_metrics.json -----
+{
+  "benchmark": "pipeline_performance",
+  "timestamp": "2026-08-19T18:34:57.262Z",
+  "hardware": {
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+    "ramGB": 16,
+    "os": "Windows 11",
+    "node": "v22.14.0"
+  },
+  "availableData": {
+    "meetings": 3,
+    "completedMeetings": 3
+  },
+  "metrics": {
+    "audioDuration": {
+      "status": "MEASURED",
+      "source": "Meeting.duration (from transcription output)",
+      "values_seconds": [
+        849.61,
+        1743.47,
+        265.31
+      ],
+      "mean_s": 952.8,
+      "min_s": 265.31,
+      "max_s": 1743.47
+    },
+    "transcriptionTime": {
+      "status": "NOT_MEASURED",
+      "reason": "transcriptionCompletedAt timestamps stored, but processing start time not stored in DB.",
+      "actualTickData": [
+        {
+          "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+          "transcriptionCompletedAt": "2026-07-22T08:42:33.555Z",
+          "createdAt": "2026-07-22T08:35:01.478Z"
+        },
+        {
+          "title": "Sec Growth DataScience",
+          "transcriptionCompletedAt": "2026-07-22T09:36:55.609Z",
+          "createdAt": "2026-07-22T09:19:31.418Z"
+        },
+        {
+          "title": "Tamil audio",
+          "transcriptionCompletedAt": "2026-08-19T10:20:35.085Z",
+          "createdAt": "2026-08-19T10:16:41.018Z"
+        }
+      ]
+    },
+    "diarization": {
+      "status": "NOT_MEASURED",
+      "reason": "Diarization time is not recorded as a separate stage in stored data.",
+      "meetingsWithSpeakers": 0
+    },
+    "llmExtractionTimes": {
+      "status": "NOT_MEASURED_FROM_STORED_DATA",
+      "reason": "meeting.processor.js logs stage timings to console but does not persist them. Run run-extraction-benchmark.js for live measurements."
+    },
+    "embeddingChunks": {
+      "status": "MEASURED",
+      "totalChunks": 96,
+      "perMeeting": [
+        {
+          "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+          "meetingId": "6a6080b544f271a027b565fd",
+          "chunks": 31
+        },
+        {
+          "title": "Sec Growth DataScience",
+          "meetingId": "6a608b2380c69cbd4caa84e0",
+          "chunks": 57
+        },
+        {
+          "title": "Tamil audio",
+          "meetingId": "6a858288ccc5a9004c310f2e",
+          "chunks": 8
+        }
+      ],
+      "embeddingModel": "nomic-embed-text (768-dim, ollama)",
+      "note": "Generation time per chunk was logged at processing time but not persisted. Re-run embedding benchmark for live timing."
+    },
+    "retrievalLatency": {
+      "status": "MEASURED",
+      "type": "keyword_search",
+      "runs": [
+        {
+          "query": "deploy",
+          "executionTimeMs": 57,
+          "returned": 0,
+          "total": 0
+        },
+        {
+          "query": "security",
+          "executionTimeMs": 43,
+          "returned": 2,
+          "total": 2
+        },
+        {
+          "query": "meeting",
+          "executionTimeMs": 34,
+          "returned": 3,
+          "total": 3
+        },
+        {
+          "query": "project",
+          "executionTimeMs": 27,
+          "returned": 2,
+          "total": 2
+        },
+        {
+          "query": "decision",
+          "executionTimeMs": 21,
+          "returned": 2,
+          "total": 2
+        }
+      ],
+      "note": "Latency includes Mongo aggregation + snippet generation."
+    },
+    "ragGenerationTime": {
+      "status": "NOT_MEASURED_IN_THIS_RUN",
+      "reason": "Requires live Ollama call with RAG pipeline. Use run-rag-benchmark.js for live measurement."
+    },
+    "endToEnd": {
+      "status": "PARTIALLY_MEASURED",
+      "note": "Completion status available, but per-stage timestamps not persisted.",
+      "completedMeetings": 3
+    }
+  }
+}
+
+----- rag_benchmark.json -----
+{
+  "benchmark": "rag_system_performance",
+  "timestamp": "2026-08-19T18:51:12.764Z",
+  "configuration": {
+    "model": "qwen2.5:7b",
+    "temperature": "0.3",
+    "retrievalTopK": "10",
+    "maxContextChars": "10000",
+    "hardware": {
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "questions": [
+    {
+      "question": "What was decided about the cloud provider?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3776,
+          "generationTimeMs": 9858,
+          "endToEndMs": 13634,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13633,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3197,
+          "generationTimeMs": 10426,
+          "endToEndMs": 13623,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13623,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3024,
+          "generationTimeMs": 10670,
+          "endToEndMs": 13694,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13694,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "Who owns the security review actions?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3182,
+          "generationTimeMs": 10512,
+          "endToEndMs": 13694,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13694,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 2896,
+          "generationTimeMs": 9689,
+          "endToEndMs": 12585,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12585,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3080,
+          "generationTimeMs": 9418,
+          "endToEndMs": 12498,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12498,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "What was discussed about car parking?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3086,
+          "generationTimeMs": 12054,
+          "endToEndMs": 15140,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 15140,
+          "answerLength": 85
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3048,
+          "generationTimeMs": 11815,
+          "endToEndMs": 14863,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 14863,
+          "answerLength": 85
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3088,
+          "generationTimeMs": 12688,
+          "endToEndMs": 15776,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 15775,
+          "answerLength": 85
+        }
+      ]
+    },
+    {
+      "question": "What are the main risks discussed?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3069,
+          "generationTimeMs": 10346,
+          "endToEndMs": 13415,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13414,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3038,
+          "generationTimeMs": 9848,
+          "endToEndMs": 12886,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12886,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3044,
+          "generationTimeMs": 9647,
+          "endToEndMs": 12691,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12691,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "How many people attended?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3058,
+          "generationTimeMs": 9591,
+          "endToEndMs": 12649,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12649,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3102,
+          "generationTimeMs": 10185,
+          "endToEndMs": 13287,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13287,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3134,
+          "generationTimeMs": 10348,
+          "endToEndMs": 13482,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13482,
+          "answerLength": 107
+        }
+      ]
+    }
+  ],
+  "aggregate": {
+    "retrievalMs": {
+      "n": 15,
+      "mean": 3121.5,
+      "min": 2896,
+      "max": 3776
+    },
+    "endToEndMs": {
+      "n": 15,
+      "mean": 13594.5,
+      "min": 12498,
+      "max": 15776
+    },
+    "chunksRetrieved": {
+      "n": 15,
+      "mean": 5
+    },
+    "disclaimer": "System-level latency metrics only. Answer accuracy is NOT measured (no ground-truth QA labels exist)."
+  }
+}
+
+----- retrieval_benchmark.json -----
+{
+  "benchmark": "retrieval_evaluation",
+  "timestamp": "2026-08-19T18:57:49.611Z",
+  "status": "NOT_MEASURED",
+  "reason": "Ground-truth label file exists but contains 0 labeled queries (template only). Manual labeling required.",
+  "benchmarkSpecFile": "D:\\final year project\\server\\benchmarks\\data\\retrieval_ground_truth.json"
+}
+
+
+
+========== 9. EXISTING PAPER REPORT ==========
+
+----- paper_experiment_report.json -----
+{
+  "generatedAt": "2026-10-06T05:37:47.194Z",
+  "system": {
+    "node": "v22.14.0",
+    "platform": "win32",
+    "architecture": "x64"
+  },
+  "dataset": {
+    "meetings": 3,
+    "transcriptWords": 7987,
+    "transcriptCharacters": 42248
+  },
+  "extractionTotals": {
+    "decisions": 10,
+    "actionItems": 17,
+    "risks": 4,
+    "unansweredQuestions": 12
+  },
+  "meetings": [
+    {
+      "id": "6a858288ccc5a9004c310f2e",
+      "title": "Tamil audio",
+      "language": "en",
+      "duration": 265.31,
+      "words": 742,
+      "transcriptChars": 3826,
+      "decisions": 0,
+      "actionItems": 1,
+      "risks": 0,
+      "unansweredQuestions": 8,
+      "createdAt": "2026-08-19T10:16:41.018Z"
+    },
+    {
+      "id": "6a608b2380c69cbd4caa84e0",
+      "title": "Sec Growth DataScience",
+      "language": "en",
+      "duration": 1743.47,
+      "words": 4647,
+      "transcriptChars": 24310,
+      "decisions": 4,
+      "actionItems": 9,
+      "risks": 2,
+      "unansweredQuestions": 3,
+      "createdAt": "2026-07-22T09:19:31.418Z"
+    },
+    {
+      "id": "6a6080b544f271a027b565fd",
+      "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+      "language": "en",
+      "duration": 849.61,
+      "words": 2598,
+      "transcriptChars": 14112,
+      "decisions": 6,
+      "actionItems": 7,
+      "risks": 2,
+      "unansweredQuestions": 1,
+      "createdAt": "2026-07-22T08:35:01.478Z"
+    }
+  ]
+}
+
+
+----- paper_experiment_report.txt -----
+===== SYSTEM =====
+v22.14.0
+11.3.0
+ollama version is 0.17.1
+Tue Oct  6 11:03:16 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 592.82                 Driver Version: 592.82         CUDA Version: 13.1     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 3050 ...  WDDM  |   00000000:01:00.0 Off |                  N/A |
+| N/A   42C    P3             11W /   30W |       0MiB /   4096MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+
+===== OLLAMA =====
+NAME                       ID              SIZE      MODIFIED      
+nomic-embed-text:latest    0a109f422b47    274 MB    2 months ago     
+llama3.1:8b                46e0c10c039e    4.9 GB    2 months ago     
+qwen2.5:7b                 845dbda0ea48    4.7 GB    2 months ago     
+qwen2.5-coder:7b           dae161e27b0e    4.7 GB    7 months ago     
+KMENTOR_v2.0:latest        338c39d07f97    2.0 GB    13 months ago    
+
+===== BENCHMARK =====
+Γùç injected env (79) from .env // tip: Γîÿ suppress logs { quiet: true }
+============================================================
+       MULTI-MEETING EXTRACTION ACCURACY BENCHMARK
+============================================================
+Ground-truth datasets: 2
+
+Loaded: extraction_ground_truth.json
+  Meeting: Effective Meetings: Simulated Exercise for Chairing & Minute Taking
+  Decisions: 6
+  Action Items: 7
+  Risks: 2
+  Unanswered Questions: 1
+
+Loaded: extraction_ground_truth_sec_growth.json
+  Meeting: SICK - Secure and Govern Growth and Data Science Team Meeting
+  Decisions: 6
+  Action Items: 10
+  Risks: 2
+  Unanswered Questions: 3
+
+Evaluating: Effective Meetings: Simulated Exercise for Chairing & Minute Taking
+{
+  "decisions": {
+    "expected": 6,
+    "predicted": 6,
+    "truePositive": 6,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1
+  },
+  "actionItems": {
+    "expected": 7,
+    "predicted": 7,
+    "truePositive": 6,
+    "falsePositive": 1,
+    "falseNegative": 1,
+    "precision": 0.8571,
+    "recall": 0.8571,
+    "f1": 0.8571
+  },
+  "risks": {
+    "expected": 2,
+    "predicted": 2,
+    "truePositive": 1,
+    "falsePositive": 1,
+    "falseNegative": 1,
+    "precision": 0.5,
+    "recall": 0.5,
+    "f1": 0.5
+  },
+  "unansweredQuestions": {
+    "expected": 1,
+    "predicted": 1,
+    "truePositive": 1,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1
+  }
+}
+
+Evaluating: SICK - Secure and Govern Growth and Data Science Team Meeting
+{
+  "decisions": {
+    "expected": 6,
+    "predicted": 4,
+    "truePositive": 1,
+    "falsePositive": 3,
+    "falseNegative": 5,
+    "precision": 0.25,
+    "recall": 0.1667,
+    "f1": 0.2
+  },
+  "actionItems": {
+    "expected": 10,
+    "predicted": 9,
+    "truePositive": 6,
+    "falsePositive": 3,
+    "falseNegative": 4,
+    "precision": 0.6667,
+    "recall": 0.6,
+    "f1": 0.6316
+  },
+  "risks": {
+    "expected": 2,
+    "predicted": 2,
+    "truePositive": 0,
+    "falsePositive": 2,
+    "falseNegative": 2,
+    "precision": 0,
+    "recall": 0,
+    "f1": 0
+  },
+  "unansweredQuestions": {
+    "expected": 3,
+    "predicted": 3,
+    "truePositive": 3,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1
+  }
+}
+
+============================================================
+                    FINAL RESULTS
+============================================================
+{
+  "decisions": {
+    "expected": 12,
+    "predicted": 10,
+    "truePositive": 7,
+    "falsePositive": 3,
+    "falseNegative": 5,
+    "precision": 0.7,
+    "recall": 0.5833,
+    "f1": 0.6364
+  },
+  "actionItems": {
+    "expected": 17,
+    "predicted": 16,
+    "truePositive": 12,
+    "falsePositive": 4,
+    "falseNegative": 5,
+    "precision": 0.75,
+    "recall": 0.7059,
+    "f1": 0.7273
+  },
+  "risks": {
+    "expected": 4,
+    "predicted": 4,
+    "truePositive": 1,
+    "falsePositive": 3,
+    "falseNegative": 3,
+    "precision": 0.25,
+    "recall": 0.25,
+    "f1": 0.25
+  },
+  "unansweredQuestions": {
+    "expected": 4,
+    "predicted": 4,
+    "truePositive": 4,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "precision": 1,
+    "recall": 1,
+    "f1": 1
+  },
+  "macroAverage": {
+    "precision": 0.675,
+    "recall": 0.6348,
+    "f1": 0.6534
+  }
+}
+
+[SAVED] D:\final year project\server\benchmarks\results\extraction_accuracy.json
+
+===== RESULTS FILE =====
+{
+  "benchmark": "multi_meeting_extraction_accuracy",
+  "timestamp": "2026-10-06T05:33:17.702Z",
+  "datasetCount": 2,
+  "meetings": [
+    {
+      "meeting": {
+        "id": "6a6080b544f271a027b565fd",
+        "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 6,
+          "truePositive": 6,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "actionItems": {
+          "expected": 7,
+          "predicted": 7,
+          "truePositive": 6,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.8571,
+          "recall": 0.8571,
+          "f1": 0.8571
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 1,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1": 0.5
+        },
+        "unansweredQuestions": {
+          "expected": 1,
+          "predicted": 1,
+          "truePositive": 1,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    },
+    {
+      "meeting": {
+        "id": "6a608b2380c69cbd4caa84e0",
+        "title": "SICK - Secure and Govern Growth and Data Science Team Meeting"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 4,
+          "truePositive": 1,
+          "falsePositive": 3,
+          "falseNegative": 5,
+          "precision": 0.25,
+          "recall": 0.1667,
+          "f1": 0.2
+        },
+        "actionItems": {
+          "expected": 10,
+          "predicted": 9,
+          "truePositive": 6,
+          "falsePositive": 3,
+          "falseNegative": 4,
+          "precision": 0.6667,
+          "recall": 0.6,
+          "f1": 0.6316
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 0,
+          "falsePositive": 2,
+          "falseNegative": 2,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0
+        },
+        "unansweredQuestions": {
+          "expected": 3,
+          "predicted": 3,
+          "truePositive": 3,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    }
+  ],
+  "overall": {
+    "decisions": {
+      "expected": 12,
+      "predicted": 10,
+      "truePositive": 7,
+      "falsePositive": 3,
+      "falseNegative": 5,
+      "precision": 0.7,
+      "recall": 0.5833,
+      "f1": 0.6364
+    },
+    "actionItems": {
+      "expected": 17,
+      "predicted": 16,
+      "truePositive": 12,
+      "falsePositive": 4,
+      "falseNegative": 5,
+      "precision": 0.75,
+      "recall": 0.7059,
+      "f1": 0.7273
+    },
+    "risks": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 1,
+      "falsePositive": 3,
+      "falseNegative": 3,
+      "precision": 0.25,
+      "recall": 0.25,
+      "f1": 0.25
+    },
+    "unansweredQuestions": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 4,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "macroAverage": {
+      "precision": 0.675,
+      "recall": 0.6348,
+      "f1": 0.6534
+    }
+  },
+  "methodology": {
+    "matching": "Token Jaccard similarity",
+    "similarityThreshold": 0.5,
+    "averaging": "Micro-average across meetings for each extraction category; macro-average across the four categories",
+    "metrics": [
+      "Precision",
+      "Recall",
+      "F1"
+    ],
+    "note": "Ground truth was manually annotated from the meeting transcripts. Benchmark evaluates extraction quality only and does not modify production extraction code."
+  }
+}
+
+
+========== 10. SYSTEM INFO ==========
+
+----- Node -----
+v22.14.0
+
+----- NPM -----
+11.3.0
+
+----- Ollama Models -----
+NAME                       ID              SIZE      MODIFIED      
+nomic-embed-text:latest    0a109f422b47    274 MB    2 months ago     
+llama3.1:8b                46e0c10c039e    4.9 GB    2 months ago     
+qwen2.5:7b                 845dbda0ea48    4.7 GB    2 months ago     
+qwen2.5-coder:7b           dae161e27b0e    4.7 GB    7 months ago     
+KMENTOR_v2.0:latest        338c39d07f97    2.0 GB    13 months ago    
+
+
+----- GPU -----
+name, memory.total [MiB], memory.used [MiB], utilization.gpu [%]
+NVIDIA GeForce RTX 3050 Laptop GPU, 4096 MiB, 0 MiB, 0 %
+
+
+========== 11. PROJECT FILE STRUCTURE ==========
+
+
+FullName                                                                              
+--------                                                                              
+D:\final year project\server\services\ai\ollama.service.js                            
+D:\final year project\server\services\ai\promptTemplates.js                           
+D:\final year project\server\services\ai\ragChat.service.js                           
+D:\final year project\server\services\ai\ragRetrieval.service.js                      
+D:\final year project\server\services\ai\extractors\actionItemExtractor.js            
+D:\final year project\server\services\ai\extractors\agendaExtractor.js                
+D:\final year project\server\services\ai\extractors\classifierExtractor.js            
+D:\final year project\server\services\ai\extractors\conversationIntelligenceExtract...
+D:\final year project\server\services\ai\extractors\decisionExtractor.js              
+D:\final year project\server\services\ai\extractors\entityExtractor.js                
+D:\final year project\server\services\ai\extractors\questionExtractor.js              
+D:\final year project\server\services\ai\extractors\riskExtractor.js                  
+D:\final year project\server\services\ai\extractors\summaryExtractor.js               
+D:\final year project\server\services\ai\parser\jsonParser.js                         
+D:\final year project\server\services\ai\processors\meeting.processor.js              
+D:\final year project\server\services\ai\utils\responseNormalizer.js                  
+D:\final year project\server\services\ai\utils\retryHandler.js                        
+D:\final year project\server\services\ai\validators\meetingSchema.js                  
+
+
+
+
+========== END ==========

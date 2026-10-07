@@ -1,0 +1,54 @@
+{
+  "benchmark": "embedding_system_performance",
+  "timestamp": "2026-08-19T18:56:11.918Z",
+  "configuration": {
+    "embeddingModel": "nomic-embed-text",
+    "provider": "ollama",
+    "chunkSizeMax": 500,
+    "batchSize": 1,
+    "hardware": {
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "chunking": {
+    "transcriptChars": 14112,
+    "chunksCreated": 31,
+    "chunkTimeMs": 6,
+    "avgChunkChars": 455.2
+  },
+  "embedding": {
+    "sampledChunks": 20,
+    "success": 20,
+    "failures": 0,
+    "perChunkTimesMs": [
+      3313,
+      124,
+      78,
+      105,
+      72,
+      70,
+      78,
+      74,
+      85,
+      75,
+      76,
+      71,
+      77,
+      72,
+      78,
+      99,
+      95,
+      94,
+      86,
+      80
+    ],
+    "meanPerChunkMs": 245.1,
+    "minPerChunkMs": 70,
+    "maxPerChunkMs": 3313
+  },
+  "disclaimer": "SYSTEM PERFORMANCE ONLY - NOT an accuracy metric."
+}

@@ -1,0 +1,62 @@
+{
+  "meetingId": "6a6080b544f271a027b565fd",
+  "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking",
+
+  "decisions": [
+    "Send an email to all staff advising them about priority parking",
+    "Allocate two car parking spaces to Sue and Jason",
+    "Put up a sign with Jason's name on it indicating his parking space",
+    "Hold a meeting between Rita and Sue to discuss low staff morale issues",
+    "Run the training idea past Clive before the next meeting",
+    "Have an effective communication skills course for Frank"
+  ],
+
+  "actionItems": [
+    {
+      "task": "Send an email to all staff advising them about priority parking",
+      "owner": "Jason Somerville",
+      "deadline": "Immediately"
+    },
+    {
+      "task": "Put up signs in the car park indicating priority spaces",
+      "owner": "Jason Somerville",
+      "deadline": "Immediately"
+    },
+    {
+      "task": "Discuss staff morale issues",
+      "owner": "Sue Carpenter and Julian Gettys",
+      "deadline": "Next meeting"
+    },
+    {
+      "task": "Run the training idea past Clive",
+      "owner": "Julian Gettys",
+      "deadline": "In the next two weeks"
+    },
+    {
+      "task": "Send a questionnaire to staff about issues affecting morale",
+      "owner": "Lucy Strokes and Sue Carpenter",
+      "deadline": "Immediately"
+    },
+    {
+      "task": "Address the financial report discrepancies",
+      "owner": "Julian Gettys, Dave, Frank Lyons",
+      "deadline": "Next meeting"
+    },
+    {
+      "task": "Address cleanliness issues in the kitchen and shower room",
+      "owner": "All team members",
+      "deadline": "Next meeting"
+    }
+  ],
+
+  "risks": [
+    "Low staff morale in certain departments",
+    "Arguments and fights over car parking spaces"
+  ],
+
+  "questions": {
+    "unanswered": [
+      "What are the IT issues?"
+    ]
+  }
+}

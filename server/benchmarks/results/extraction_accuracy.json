@@ -1,0 +1,161 @@
+{
+  "benchmark": "multi_meeting_extraction_accuracy",
+  "timestamp": "2026-10-06T05:39:14.155Z",
+  "datasetCount": 2,
+  "meetings": [
+    {
+      "meeting": {
+        "id": "6a6080b544f271a027b565fd",
+        "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 6,
+          "truePositive": 6,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "actionItems": {
+          "expected": 7,
+          "predicted": 7,
+          "truePositive": 6,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.8571,
+          "recall": 0.8571,
+          "f1": 0.8571
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 1,
+          "falsePositive": 1,
+          "falseNegative": 1,
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1": 0.5
+        },
+        "unansweredQuestions": {
+          "expected": 1,
+          "predicted": 1,
+          "truePositive": 1,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    },
+    {
+      "meeting": {
+        "id": "6a608b2380c69cbd4caa84e0",
+        "title": "SICK - Secure and Govern Growth and Data Science Team Meeting"
+      },
+      "results": {
+        "decisions": {
+          "expected": 6,
+          "predicted": 4,
+          "truePositive": 1,
+          "falsePositive": 3,
+          "falseNegative": 5,
+          "precision": 0.25,
+          "recall": 0.1667,
+          "f1": 0.2
+        },
+        "actionItems": {
+          "expected": 10,
+          "predicted": 9,
+          "truePositive": 6,
+          "falsePositive": 3,
+          "falseNegative": 4,
+          "precision": 0.6667,
+          "recall": 0.6,
+          "f1": 0.6316
+        },
+        "risks": {
+          "expected": 2,
+          "predicted": 2,
+          "truePositive": 0,
+          "falsePositive": 2,
+          "falseNegative": 2,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0
+        },
+        "unansweredQuestions": {
+          "expected": 3,
+          "predicted": 3,
+          "truePositive": 3,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    }
+  ],
+  "overall": {
+    "decisions": {
+      "expected": 12,
+      "predicted": 10,
+      "truePositive": 7,
+      "falsePositive": 3,
+      "falseNegative": 5,
+      "precision": 0.7,
+      "recall": 0.5833,
+      "f1": 0.6364
+    },
+    "actionItems": {
+      "expected": 17,
+      "predicted": 16,
+      "truePositive": 12,
+      "falsePositive": 4,
+      "falseNegative": 5,
+      "precision": 0.75,
+      "recall": 0.7059,
+      "f1": 0.7273
+    },
+    "risks": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 1,
+      "falsePositive": 3,
+      "falseNegative": 3,
+      "precision": 0.25,
+      "recall": 0.25,
+      "f1": 0.25
+    },
+    "unansweredQuestions": {
+      "expected": 4,
+      "predicted": 4,
+      "truePositive": 4,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "macroAverage": {
+      "precision": 0.675,
+      "recall": 0.6348,
+      "f1": 0.6534
+    }
+  },
+  "methodology": {
+    "matching": "Token Jaccard similarity",
+    "similarityThreshold": 0.5,
+    "averaging": "Micro-average across meetings for each extraction category; macro-average across the four categories",
+    "metrics": [
+      "Precision",
+      "Recall",
+      "F1"
+    ],
+    "note": "Ground truth was manually annotated from the meeting transcripts. Benchmark evaluates extraction quality only and does not modify production extraction code."
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "benchmark": "rag_system_performance",
+  "timestamp": "2026-08-19T18:51:12.764Z",
+  "configuration": {
+    "model": "qwen2.5:7b",
+    "temperature": "0.3",
+    "retrievalTopK": "10",
+    "maxContextChars": "10000",
+    "hardware": {
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "questions": [
+    {
+      "question": "What was decided about the cloud provider?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3776,
+          "generationTimeMs": 9858,
+          "endToEndMs": 13634,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13633,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3197,
+          "generationTimeMs": 10426,
+          "endToEndMs": 13623,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13623,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3024,
+          "generationTimeMs": 10670,
+          "endToEndMs": 13694,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13694,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "Who owns the security review actions?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3182,
+          "generationTimeMs": 10512,
+          "endToEndMs": 13694,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13694,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 2896,
+          "generationTimeMs": 9689,
+          "endToEndMs": 12585,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12585,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3080,
+          "generationTimeMs": 9418,
+          "endToEndMs": 12498,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12498,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "What was discussed about car parking?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3086,
+          "generationTimeMs": 12054,
+          "endToEndMs": 15140,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 15140,
+          "answerLength": 85
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3048,
+          "generationTimeMs": 11815,
+          "endToEndMs": 14863,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 14863,
+          "answerLength": 85
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3088,
+          "generationTimeMs": 12688,
+          "endToEndMs": 15776,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 15775,
+          "answerLength": 85
+        }
+      ]
+    },
+    {
+      "question": "What are the main risks discussed?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3069,
+          "generationTimeMs": 10346,
+          "endToEndMs": 13415,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13414,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3038,
+          "generationTimeMs": 9848,
+          "endToEndMs": 12886,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12886,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3044,
+          "generationTimeMs": 9647,
+          "endToEndMs": 12691,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12691,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "How many people attended?",
+      "runs": [
+        {
+          "run": 1,
+          "retrievalTimeMs": 3058,
+          "generationTimeMs": 9591,
+          "endToEndMs": 12649,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 12649,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "retrievalTimeMs": 3102,
+          "generationTimeMs": 10185,
+          "endToEndMs": 13287,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13287,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "retrievalTimeMs": 3134,
+          "generationTimeMs": 10348,
+          "endToEndMs": 13482,
+          "chunksRetrieved": 5,
+          "contextChars": 2097,
+          "retrievalSource": "mongodb_fallback",
+          "responseTimeMetadata": 13482,
+          "answerLength": 107
+        }
+      ]
+    }
+  ],
+  "aggregate": {
+    "retrievalMs": {
+      "n": 15,
+      "mean": 3121.5,
+      "min": 2896,
+      "max": 3776
+    },
+    "endToEndMs": {
+      "n": 15,
+      "mean": 13594.5,
+      "min": 12498,
+      "max": 15776
+    },
+    "chunksRetrieved": {
+      "n": 15,
+      "mean": 5
+    },
+    "disclaimer": "System-level latency metrics only. Answer accuracy is NOT measured (no ground-truth QA labels exist)."
+  }
+}

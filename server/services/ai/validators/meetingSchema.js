@@ -1,11 +1,9 @@
 class MeetingSchemaValidator {
     
     verifySemanticMatch(text, transcript, itemType) {
-        if (!transcript) return;
-        if (!text || typeof text !== "string") return;
+        if (!transcript) return false;
+        if (!text || typeof text !== "string") return false;
 
-        console.log(`${itemType} validation started.`);
-        
         const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3);
         const transcriptLower = transcript.toLowerCase();
         
@@ -17,17 +15,20 @@ class MeetingSchemaValidator {
         }
         
         const matchRatio = words.length > 0 ? matchCount / words.length : 1;
-        const confidence = (matchRatio * 100).toFixed(0);
         
-        console.log(`${itemType} verified.`);
-        console.log(`${itemType} confidence: ${confidence}`);
+        const pass = matchRatio >= 0.2 || words.length === 0;
         
-        if (matchRatio < 0.2 && words.length > 0) {
-            console.log(`Semantic match: FAIL`);
-            console.log(`Warning: ${itemType} might not be supported by transcript. (Kept to prevent data loss)`);
-        } else {
+        if (pass) {
+            console.log(`${itemType} verified.`);
+            console.log(`${itemType} confidence: ${(matchRatio * 100).toFixed(0)}`);
             console.log(`Semantic match: PASS`);
+        } else {
+            console.log(`${itemType} rejected.`);
+            console.log(`${itemType} confidence: ${(matchRatio * 100).toFixed(0)}`);
+            console.log(`Semantic match: FAIL - ${itemType} not supported by transcript.`);
         }
+        
+        return pass;
     }
 
     validateSummary(data) {
@@ -96,8 +97,9 @@ class MeetingSchemaValidator {
         const validRisks = [];
         for (const risk of data.risks) {
             if (risk && typeof risk === "string" && risk.trim() !== "") {
-                this.verifySemanticMatch(risk, transcript, "Risk");
-                validRisks.push(risk);
+                if (this.verifySemanticMatch(risk, transcript, "Risk")) {
+                    validRisks.push(risk);
+                }
             }
         }
         data.risks = validRisks;

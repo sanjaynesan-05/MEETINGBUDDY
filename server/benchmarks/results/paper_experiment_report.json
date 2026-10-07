@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-10-06T05:37:47.194Z",
+  "system": {
+    "node": "v22.14.0",
+    "platform": "win32",
+    "architecture": "x64"
+  },
+  "dataset": {
+    "meetings": 3,
+    "transcriptWords": 7987,
+    "transcriptCharacters": 42248
+  },
+  "extractionTotals": {
+    "decisions": 10,
+    "actionItems": 17,
+    "risks": 4,
+    "unansweredQuestions": 12
+  },
+  "meetings": [
+    {
+      "id": "6a858288ccc5a9004c310f2e",
+      "title": "Tamil audio",
+      "language": "en",
+      "duration": 265.31,
+      "words": 742,
+      "transcriptChars": 3826,
+      "decisions": 0,
+      "actionItems": 1,
+      "risks": 0,
+      "unansweredQuestions": 8,
+      "createdAt": "2026-08-19T10:16:41.018Z"
+    },
+    {
+      "id": "6a608b2380c69cbd4caa84e0",
+      "title": "Sec Growth DataScience",
+      "language": "en",
+      "duration": 1743.47,
+      "words": 4647,
+      "transcriptChars": 24310,
+      "decisions": 4,
+      "actionItems": 9,
+      "risks": 2,
+      "unansweredQuestions": 3,
+      "createdAt": "2026-07-22T09:19:31.418Z"
+    },
+    {
+      "id": "6a6080b544f271a027b565fd",
+      "title": "Effective Meetings_ Simulated Exercise for Chairing & Minute Taking",
+      "language": "en",
+      "duration": 849.61,
+      "words": 2598,
+      "transcriptChars": 14112,
+      "decisions": 6,
+      "actionItems": 7,
+      "risks": 2,
+      "unansweredQuestions": 1,
+      "createdAt": "2026-07-22T08:35:01.478Z"
+    }
+  ]
+}

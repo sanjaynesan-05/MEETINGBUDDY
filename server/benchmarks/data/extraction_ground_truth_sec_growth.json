@@ -1,0 +1,80 @@
+{
+  "title": "SICK - Secure and Govern Growth and Data Science Team Meeting",
+  "meetingId": "6a608b2380c69cbd4caa84e0",
+  "decisions": [
+    "Allen has been appointed as acting full-stack manager for security policies.",
+    "Anti-abuse is being moved into the data science section, with data science becoming the renamed section covering the existing model ops and anti-abuse groups.",
+    "A second team will be established within dynamic analysis without creating a new group, with the split based on feature categories.",
+    "The development team will close the MR-rate improvement issue and link the meeting notes.",
+    "The team will continue using the existing Google Docs for talent assessments until Workday access and the exact process are available.",
+    "The team will use the engineering project/team member handbook entries as the source for maintainer information rather than relying solely on reviewer roulette."
+  ],
+  "actionItems": [
+    {
+      "task": "Compile and report on team allocations, error budgets, reliability, and security incidents.",
+      "owner": "Thomas and Neil",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Continue working through the handbook and organizational changes associated with moving anti-abuse into data science.",
+      "owner": "Mon",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Set up and maintain the container security bot that weekly asks the team for volunteers to resource the required data.",
+      "owner": "Tiago",
+      "deadline": "Weekly"
+    },
+    {
+      "task": "Report back on interview refinement changes.",
+      "owner": "J",
+      "deadline": "End of the quarter"
+    },
+    {
+      "task": "Continue experimenting with refinement meetings and smaller work items to improve engineering velocity and MR rate.",
+      "owner": "Engineering team",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Brainstorm and discuss options for handling security findings related to commercial analyzer versions, including deviation requests and bulk fixes.",
+      "owner": "Thomas and team",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Run the proposed 'Enrichment' team name past David de Santo and determine whether organizational approval is required.",
+      "owner": "Thomas",
+      "deadline": "Tomorrow"
+    },
+    {
+      "task": "Add announcements for work anniversaries and new hires to the meeting template.",
+      "owner": "Thomas and team",
+      "deadline": "Not specified"
+    },
+    {
+      "task": "Provide feedback on the development vision, mission, and direction.",
+      "owner": "All interested team members",
+      "deadline": "Next week"
+    },
+    {
+      "task": "Add maintainers to individual team-member YAML files in the handbook for projects that require them.",
+      "owner": "Seth",
+      "deadline": "Not specified"
+    }
+  ],
+  "risks": [
+    "Security issues associated with dependency and container scanning may require remediation plans for FedRAMP-compliant or certified feature categories, including cases involving false positives or projects that do not provide fixes.",
+    "Changes to team structure, approvals, security processes, and maintainer requirements may create additional coordination overhead or delays."
+  ],
+  "questions": {
+    "answered": [
+      "What are you going to call your new team or how will you differentiate?",
+      "Can folks check with their teams to see if the new approval rules are affecting them?",
+      "Do you have any thoughts on renaming the team to 'enrichment'?"
+    ],
+    "unanswered": [
+      "Why are you here when it's midnight?",
+      "How do you plan to improve the signal and noise ratio in communications?",
+      "What is the story behind what is going on with reliability or security incidents?"
+    ]
+  }
+}

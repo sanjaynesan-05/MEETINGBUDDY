@@ -1,0 +1,202 @@
+{
+  "benchmark": "extraction_parallel_vs_sequential",
+  "timestamp": "2026-08-19T18:35:23.644Z",
+  "runId": "2026-08-19T18-35-23-642Z",
+  "configuration": {
+    "model": "qwen2.5:7b",
+    "temperature": "0",
+    "num_ctx": "8192",
+    "maxChars": 24000,
+    "source": "db",
+    "transcriptId": "largest_in_db",
+    "numStages": 9,
+    "hardware": {
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12450H (12 cores)",
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 12.8)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "runs": [
+    {
+      "runNumber": 1,
+      "transcriptChars": 24029,
+      "sequential": {
+        "wallClockMs": 490289,
+        "sumStageInferenceMs": 490265,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 86957,
+            "validationTime_ms": 0,
+            "totalTime_ms": 86957,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 60601,
+            "validationTime_ms": 1,
+            "totalTime_ms": 60602,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 28403,
+            "validationTime_ms": 8,
+            "totalTime_ms": 28411,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 143472,
+            "validationTime_ms": 6,
+            "totalTime_ms": 143478,
+            "status": "Success"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 15132,
+            "validationTime_ms": 3,
+            "totalTime_ms": 15135,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 35162,
+            "validationTime_ms": 5,
+            "totalTime_ms": 35167,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 63343,
+            "validationTime_ms": 0,
+            "totalTime_ms": 63343,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 18512,
+            "validationTime_ms": 1,
+            "totalTime_ms": 18513,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 38683,
+            "validationTime_ms": 0,
+            "totalTime_ms": 38683,
+            "status": "Success"
+          }
+        ]
+      },
+      "parallel": {
+        "wallClockMs": 306385,
+        "sumStageInferenceMs": 306385,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 58101,
+            "validationTime_ms": 0,
+            "totalTime_ms": 58101,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 306381,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306381,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 207099,
+            "validationTime_ms": 3,
+            "totalTime_ms": 207102,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 306379,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306379,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 179134,
+            "validationTime_ms": 2,
+            "totalTime_ms": 179136,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 306381,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306381,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 165492,
+            "validationTime_ms": 0,
+            "totalTime_ms": 165492,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 306382,
+            "validationTime_ms": 0,
+            "totalTime_ms": 306382,
+            "status": "Failed: fetch failed"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 95482,
+            "validationTime_ms": 0,
+            "totalTime_ms": 95482,
+            "status": "Success"
+          }
+        ]
+      },
+      "speedup": 1.6,
+      "latencyReductionPercent": 37.51
+    }
+  ],
+  "aggregate": {
+    "sequential": {
+      "n": 1,
+      "mean_ms": 490289,
+      "median_ms": 490289,
+      "min_ms": 490289,
+      "max_ms": 490289,
+      "stddev_ms": 0
+    },
+    "parallel": {
+      "n": 1,
+      "mean_ms": 306385,
+      "median_ms": 306385,
+      "min_ms": 306385,
+      "max_ms": 306385,
+      "stddev_ms": 0
+    },
+    "speedup": {
+      "n": 1,
+      "mean_x": 1.6,
+      "median_x": 1.6,
+      "min_x": 1.6,
+      "max_x": 1.6
+    },
+    "latencyReductionPercent": {
+      "n": 1,
+      "mean_pct": 37.51,
+      "median_pct": 37.51,
+      "min_pct": 37.51,
+      "max_pct": 37.51
+    }
+  },
+  "speedupFormula": "speedup = sequential_wall_clock / parallel_wall_clock",
+  "latencyReductionFormula": "latency_reduction_pct = ((seq - par) / seq) * 100",
+  "disclaimer": "These are SYNTHETIC BENCHMARK measurements of LLM inference wall-clock latency for software throughput comparison. They are NOT model accuracy metrics."
+}

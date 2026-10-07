@@ -1,0 +1,30 @@
+{
+  "benchmark": "extraction_quality_assessment",
+  "timestamp": "2026-08-19T18:58:38.148Z",
+  "status": "NOT_MEASURED",
+  "reason": "No annotated reference labels (ground truth) exist for extraction quality evaluation.",
+  "evidence": {
+    "referenceSummaries": "NOT FOUND - no reference summary data exists in repository",
+    "expectedDecisions": "NOT FOUND - no gold-standard decision labels",
+    "expectedActionItems": "NOT FOUND - no gold-standard action item labels",
+    "expectedRisks": "NOT FOUND - no gold-standard risk labels",
+    "annotatedTranscripts": "NOT FOUND - test/stt/ directories are empty",
+    "manuallyVerifiedOutputs": "NOT FOUND - no verified meeting outputs in repository",
+    "testFixtures": "NOT FOUND - no test fixtures for extraction quality"
+  },
+  "whatExists": {
+    "meetings": 3,
+    "extractedDecisions": 10,
+    "extractedActionItems": 17,
+    "extractedRisks": 4,
+    "note": "Extraction outputs exist but no labeled gold-standard to compare them against."
+  },
+  "recommendation": {
+    "minimumManualVerificationSet": [
+      "Manually verify 5 meetings x ~10 extracted items = ~50 action items across the 3 real meetings.",
+      "Label each extracted item as: correct, partially-correct, incorrect, missed (gold standard).",
+      "After labeling, compute token/partial matching P/R/F1 using the benchmark harness."
+    ],
+    "requiredFile": "server/benchmarks/data/extraction_ground_truth.json"
+  }
+}
