@@ -12,7 +12,7 @@ const { generateResponse } = require('./generationService');
 
 const config = require('../config/chatConfig');
 
-const executeChatPipeline = async (question, filters = {}, sessionId = null) => {
+const executeChatPipeline = async (question, filters = {}, sessionId = null, userId = null) => {
   const startTime = Date.now();
 
   console.log('Incoming question:', question);
@@ -39,7 +39,7 @@ const executeChatPipeline = async (question, filters = {}, sessionId = null) => 
   // Attempt Qdrant vector search
   if (queryVector) {
     try {
-      rawResults = await searchQdrant(queryVector, filters);
+      rawResults = await searchQdrant(queryVector, filters, userId);
       if (rawResults && rawResults.length > 0) {
         retrievalSource = 'qdrant';
       }
@@ -52,7 +52,7 @@ const executeChatPipeline = async (question, filters = {}, sessionId = null) => 
   if (rawResults.length === 0) {
     console.log('[ChatOrchestrator] Qdrant returned no results — falling back to MongoDB...');
     try {
-      rawResults = await searchMongoDB(question, filters);
+      rawResults = await searchMongoDB(question, filters, userId);
       if (rawResults && rawResults.length > 0) {
         retrievalSource = 'mongodb_fallback';
       }

@@ -13,7 +13,7 @@ const retrieveContext = async (req, res) => {
     
     const queryVector = await generateQueryEmbedding(question);
     
-    const rawResults = await searchQdrant(queryVector, filters || {});
+    const rawResults = await searchQdrant(queryVector, filters || {}, req.user._id);
     
     const rankedResults = rankResults(rawResults);
     

@@ -9,12 +9,12 @@ const handleConversation = async (req, res) => {
     
     validateConversationRequest(sessionId, question, meetingId);
     
-    const response = await processConversation(sessionId, question, meetingId);
+    const response = await processConversation(sessionId, question, meetingId, req.user._id);
     
     return res.status(200).json(response);
   } catch (error) {
     console.error('Conversation processing error:', error);
-    return res.status(500).json({
+    return res.status(error.status || 500).json({
       success: false,
       error: error.message || 'Internal server error processing conversation'
     });
@@ -27,7 +27,8 @@ const getSession = async (req, res) => {
 
 const deleteSession = async (req, res) => {
   try {
-    await expireSession(req.params.sessionId);
+    const deleted = await expireSession(req.params.sessionId, req.user._id);
+    if (!deleted) return res.status(404).json({ success: false, error: 'Session not found' });
     return res.status(200).json({ success: true, message: 'Session deleted' });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to delete session' });

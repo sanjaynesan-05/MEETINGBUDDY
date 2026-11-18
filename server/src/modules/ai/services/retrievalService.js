@@ -3,8 +3,10 @@ const config = require('../config/retrievalConfig');
 const Meeting = require('../../../../models/Meeting');
 const { generateEmbedding: generateDbEmbedding } = require('./embeddingService');
 const { v4: uuidv4 } = require('uuid');
+const { buildOwnershipCondition, getOwnedMeetingIds } = require('../../../../services/search/meetingAccess');
 
-const searchQdrant = async (queryVector, filters = {}) => {
+// userId is required: results are always restricted to the caller's own meetings.
+const searchQdrant = async (queryVector, filters = {}, userId) => {
   console.log('Searching Qdrant...');
 
   if (!QDRANT_ENABLED || !qdrantClient) {
@@ -12,11 +14,11 @@ const searchQdrant = async (queryVector, filters = {}) => {
     return [];
   }
 
-  const mustConditions = [];
+  const ownership = await buildOwnershipCondition(userId, filters.meetingId);
+  if (!ownership) return []; // user owns no (matching) meetings
 
-  if (filters.meetingId) {
-    mustConditions.push({ key: 'meetingId', match: { value: filters.meetingId } });
-  }
+  const mustConditions = [ownership];
+
   if (filters.meetingType) {
     mustConditions.push({ key: 'meetingType', match: { value: filters.meetingType } });
   }
@@ -53,10 +55,15 @@ const searchQdrant = async (queryVector, filters = {}) => {
   }
 };
 
-const searchMongoDB = async (question, filters = {}) => {
+const searchMongoDB = async (question, filters = {}, userId) => {
   console.log('[Qdrant] Falling back to MongoDB transcript search...');
-  const meetingQuery = { status: 'completed' };
-  if (filters.meetingId) meetingQuery._id = filters.meetingId;
+  const owned = await getOwnedMeetingIds(userId);
+  if (owned.length === 0) return [];
+  const meetingQuery = { status: 'completed', _id: { $in: owned } };
+  if (filters.meetingId) {
+    if (!owned.includes(String(filters.meetingId))) return [];
+    meetingQuery._id = filters.meetingId;
+  }
 
   const meetings = await Meeting.find(meetingQuery).limit(5).lean();
 

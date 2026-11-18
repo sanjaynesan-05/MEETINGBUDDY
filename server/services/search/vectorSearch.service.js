@@ -1,10 +1,14 @@
 const { qdrantClient, COLLECTION_NAME, QDRANT_ENABLED, searchPoints } = require('../embeddings/qdrantStorage');
 const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('./search.constants');
+const { buildOwnershipCondition } = require('./meetingAccess');
 
 class VectorSearchService {
   async search(query, params = {}) {
     const startTime = Date.now();
-    const { page = 1, limit = DEFAULT_PAGE_SIZE, meetingId } = params;
+    // `userId` scopes results to that user's meetings. `unscoped: true` searches
+    // the whole collection and is only for offline benchmarks/tests — never
+    // pass it from a request handler.
+    const { page = 1, limit = DEFAULT_PAGE_SIZE, meetingId, userId, unscoped = false } = params;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(limit, 10) || DEFAULT_PAGE_SIZE));
@@ -33,8 +37,21 @@ class VectorSearchService {
     }
 
     const mustConditions = [];
-    if (meetingId) {
-      mustConditions.push({ key: 'meetingId', match: { value: meetingId } });
+    if (unscoped) {
+      if (meetingId) mustConditions.push({ key: 'meetingId', match: { value: String(meetingId) } });
+    } else {
+      const ownership = await buildOwnershipCondition(userId, meetingId);
+      if (!ownership) {
+        return {
+          success: true,
+          query,
+          source: 'vector',
+          stats: { executionTimeMs: Date.now() - startTime, searchedMeetings: 0, returned: 0, vectorSearchAvailable: QDRANT_ENABLED },
+          pagination: { page: 1, limit: limitNum, total: 0 },
+          results: [],
+        };
+      }
+      mustConditions.push(ownership);
     }
 
     let searchResults;

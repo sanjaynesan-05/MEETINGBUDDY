@@ -59,7 +59,7 @@ async function runTests() {
       assert(upsertCount === 0, 'Qdrant unavailable — upsert gracefully returned 0 (data saved to MongoDB)');
     }
 
-    const searchRes = await vectorSearch.search('project kickoff', { meetingId: testMeetingId });
+    const searchRes = await vectorSearch.search('project kickoff', { meetingId: testMeetingId, unscoped: true });
     assert(searchRes.success === true, 'Vector search returns success');
     console.log(`  Query returned ${searchRes.results.length} results`);
 

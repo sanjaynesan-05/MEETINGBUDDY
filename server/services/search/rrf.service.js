@@ -18,7 +18,7 @@ class RRFService {
 
     const [keywordResults, vectorResults] = await Promise.allSettled([
       searchService.search(userId, params),
-      vectorSearchService.search(query, { meetingId: params.meetingId }),
+      vectorSearchService.search(query, { meetingId: params.meetingId, userId }),
     ]);
 
     const kwData = keywordResults.status === 'fulfilled' ? keywordResults.value.results || [] : [];

@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -19,7 +18,10 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('⚠️  Uncaught Exception:', err);
+  // After an uncaught exception the process is in an undefined state.
+  // Log and exit so a process manager (nodemon/pm2/docker) restarts it cleanly.
+  console.error('⚠️  Uncaught Exception — shutting down:', err);
+  process.exit(1);
 });
 
 // Security middleware
@@ -65,8 +67,11 @@ const chatLimiter = rateLimit({
 app.use('/api/auth', authLimiter);
 app.use('/api/search', searchLimiter);
 app.use('/api/chat', chatLimiter);
+app.use('/api/ai', chatLimiter);
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// NOTE: uploaded recordings are intentionally NOT served statically —
+// meeting audio is private and must only be reachable through authenticated,
+// ownership-checked routes (see GET /api/meetings/:id/media).
 
 // Public health check — must be registered BEFORE any protected /api prefix middleware
 app.get('/api/health', async (req, res) => {
@@ -85,7 +90,7 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/meetings', require('./routes/meetings'));
 app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/ai', require('./src/modules/ai/routes/ai.routes'));
+app.use('/api/ai', require('./middleware/auth'), require('./src/modules/ai/routes/ai.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes.js'));
 app.use('/api/search', require('./routes/search.routes.js'));
 app.use('/api/chat', require('./routes/chat.routes.js'));

@@ -4,7 +4,7 @@ const handleChatRequest = async (req, res) => {
   try {
     const { question, filters, sessionId } = req.body;
     
-    const response = await executeChatPipeline(question, filters || {}, sessionId);
+    const response = await executeChatPipeline(question, filters || {}, sessionId, req.user._id);
     
     return res.status(200).json(response);
   } catch (error) {

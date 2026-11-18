@@ -213,7 +213,7 @@ async function main() {
     },
     vector: async (q) => {
       try {
-        const res = await vectorSearchService.search(q, { limit: 10 });
+        const res = await vectorSearchService.search(q, { limit: 10, unscoped: true });
         return (res.results || []).map((r) => r.meetingId.toString());
       } catch (e) {
         return [];

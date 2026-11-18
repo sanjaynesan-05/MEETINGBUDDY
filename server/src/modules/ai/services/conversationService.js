@@ -6,9 +6,9 @@ const { injectContext } = require('./contextInjectionService');
 const { executeChatPipeline } = require('./chatOrchestratorService');
 const config = require('../config/conversationConfig');
 
-const processConversation = async (sessionId, question, meetingId) => {
+const processConversation = async (sessionId, question, meetingId, userId) => {
   console.log(`[Conversation] Loading session ${sessionId}...`);
-  const session = await getOrCreateSession(sessionId, meetingId);
+  const session = await getOrCreateSession(sessionId, meetingId, userId);
   
   console.log(`[Conversation] Loading history...`);
   const history = loadMessages(session);
@@ -29,7 +29,7 @@ const processConversation = async (sessionId, question, meetingId) => {
   
   console.log(`[Conversation] Calling AI Gateway...`);
   const filters = meetingId ? { meetingId } : {};
-  const aiResponse = await executeChatPipeline(enhancedQuestion, filters, sessionId);
+  const aiResponse = await executeChatPipeline(enhancedQuestion, filters, sessionId, userId);
   
   console.log(`[Conversation] Saving conversation...`);
   const userMsg = { content: question }; // Save original question
