@@ -1,8 +1,9 @@
-const {
+﻿const {
   MAX_CHUNK_SIZE,
   MIN_CHUNK_SIZE,
   CURRENT_CHUNK_VERSION,
 } = require('./embedding.constants');
+
 const {
   generateChunkId,
   computeContentHash,
@@ -11,101 +12,222 @@ const {
   splitTextByBoundaries,
 } = require('./embedding.helpers');
 
-/**
- * Intelligent Transcript & Context Chunker Service
- */
+function toValidTime(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function normalizeSpeaker(value) {
+  if (typeof value !== 'string') return null;
+
+  const speaker = value.trim();
+
+  if (!speaker || speaker.toLowerCase() === 'unknown') {
+    return null;
+  }
+
+  return speaker;
+}
+
+function splitLongText(text) {
+  const sentences = splitTextByBoundaries(text);
+  const pieces = [];
+
+  for (const sentence of sentences.length ? sentences : [text]) {
+    let remaining = sentence;
+
+    while (remaining.length > MAX_CHUNK_SIZE) {
+      let cutPoint = remaining.lastIndexOf(' ', MAX_CHUNK_SIZE);
+
+      if (cutPoint <= 0) {
+        cutPoint = MAX_CHUNK_SIZE;
+      }
+
+      const piece = remaining.slice(0, cutPoint).trim();
+
+      if (piece) pieces.push(piece);
+
+      remaining = remaining.slice(cutPoint).trim();
+    }
+
+    if (remaining) pieces.push(remaining);
+  }
+
+  return pieces;
+}
+
+function groupText(group) {
+  return group.map((item) => item.text).join(' ');
+}
+
 class ChunkingService {
-  /**
-   * Chunks a meeting transcript into structured, context-preserving segments.
-   *
-   * @param {string} meetingId - The ID of the meeting
-   * @param {string} transcriptText - Raw transcript or structured text
-   * @param {Object} options - Additional options (chunkType, speaker, meetingType, etc.)
-   * @returns {Array<Object>} List of chunk objects ready for embedding
-   */
   chunkTranscript(meetingId, transcriptText, options = {}) {
-    if (!transcriptText || typeof transcriptText !== 'string' || !transcriptText.trim()) {
+    if (
+      !meetingId ||
+      typeof transcriptText !== 'string' ||
+      !transcriptText.trim()
+    ) {
       return [];
     }
 
     const {
       chunkType = 'Transcript',
-      speaker = null,
+      speaker: defaultSpeaker = null,
       meetingType = '',
       chunkVersion = CURRENT_CHUNK_VERSION,
+      transcriptSegments = [],
     } = options;
 
-    const normalized = normalizeText(transcriptText);
-    const sentenceSegments = splitTextByBoundaries(normalized);
+    const units = [];
+    const hasSegments =
+      Array.isArray(transcriptSegments) &&
+      transcriptSegments.some(
+        (segment) =>
+          segment &&
+          typeof segment.text === 'string' &&
+          segment.text.trim()
+      );
 
-    const mergedChunks = [];
-    let currentBuffer = '';
+    if (hasSegments) {
+      for (const segment of transcriptSegments) {
+        if (!segment || typeof segment.text !== 'string') continue;
 
-    for (const segment of sentenceSegments) {
-      // If adding segment exceeds MAX_CHUNK_SIZE and buffer isn't empty, flush buffer
-      if (currentBuffer && (currentBuffer.length + segment.length + 1 > MAX_CHUNK_SIZE)) {
-        mergedChunks.push(currentBuffer);
-        currentBuffer = segment;
+        const text = normalizeText(segment.text);
+        if (!text) continue;
+
+        const startTime = toValidTime(segment.start);
+        const endTime = toValidTime(segment.end);
+        const segmentSpeaker = normalizeSpeaker(segment.speaker);
+
+        for (const piece of splitLongText(text)) {
+          units.push({
+            text: piece,
+            startTime,
+            endTime,
+            speaker: segmentSpeaker,
+          });
+        }
+      }
+    } else {
+      const text = normalizeText(transcriptText);
+
+      for (const piece of splitLongText(text)) {
+        units.push({
+          text: piece,
+          startTime: null,
+          endTime: null,
+          speaker: normalizeSpeaker(defaultSpeaker),
+        });
+      }
+    }
+
+    if (!units.length) return [];
+
+    // Group adjacent transcript units without exceeding the size limit.
+    let groups = [];
+    let currentGroup = [];
+    let currentLength = 0;
+
+    for (const unit of units) {
+      const addedLength = unit.text.length + (currentGroup.length ? 1 : 0);
+
+      if (
+        currentGroup.length &&
+        currentLength + addedLength > MAX_CHUNK_SIZE
+      ) {
+        groups.push(currentGroup);
+        currentGroup = [];
+        currentLength = 0;
+      }
+
+      currentLength += unit.text.length + (currentGroup.length ? 1 : 0);
+      currentGroup.push(unit);
+    }
+
+    if (currentGroup.length) groups.push(currentGroup);
+
+    // Merge small groups with the following group when they fit.
+    let index = 0;
+
+    while (index < groups.length - 1) {
+      const leftText = groupText(groups[index]);
+      const rightText = groupText(groups[index + 1]);
+
+      if (
+        leftText.length < MIN_CHUNK_SIZE &&
+        leftText.length + 1 + rightText.length <= MAX_CHUNK_SIZE
+      ) {
+        groups[index + 1] = [
+          ...groups[index],
+          ...groups[index + 1],
+        ];
+
+        groups.splice(index, 1);
       } else {
-        currentBuffer = currentBuffer ? `${currentBuffer} ${segment}` : segment;
-      }
-
-      // If single segment alone is oversized, split it forcibly
-      while (currentBuffer.length > MAX_CHUNK_SIZE) {
-        const cutPoint = currentBuffer.lastIndexOf(' ', MAX_CHUNK_SIZE) || MAX_CHUNK_SIZE;
-        const part = currentBuffer.substring(0, cutPoint).trim();
-        mergedChunks.push(part);
-        currentBuffer = currentBuffer.substring(cutPoint).trim();
+        index++;
       }
     }
 
-    if (currentBuffer) {
-      mergedChunks.push(currentBuffer);
-    }
+    // Merge a small final group with the previous one if possible.
+    if (groups.length > 1) {
+      const lastIndex = groups.length - 1;
+      const previousText = groupText(groups[lastIndex - 1]);
+      const lastText = groupText(groups[lastIndex]);
 
-    // Merge tiny trailing chunks if needed
-    const finalizedTexts = [];
-    let temp = '';
+      if (
+        lastText.length < MIN_CHUNK_SIZE &&
+        previousText.length + 1 + lastText.length <= MAX_CHUNK_SIZE
+      ) {
+        groups[lastIndex - 1] = [
+          ...groups[lastIndex - 1],
+          ...groups[lastIndex],
+        ];
 
-    for (let i = 0; i < mergedChunks.length; i++) {
-      const chunkText = mergedChunks[i];
-      if (chunkText.length < MIN_CHUNK_SIZE && i < mergedChunks.length - 1) {
-        temp = temp ? `${temp} ${chunkText}` : chunkText;
-      } else {
-        const fullText = temp ? `${temp} ${chunkText}` : chunkText;
-        finalizedTexts.push(fullText);
-        temp = '';
-      }
-    }
-    if (temp) {
-      if (finalizedTexts.length > 0) {
-        finalizedTexts[finalizedTexts.length - 1] += ` ${temp}`;
-      } else {
-        finalizedTexts.push(temp);
+        groups.pop();
       }
     }
 
-    // Map into final chunk data structures
-    return finalizedTexts.map((text, index) => {
-      const chunkId = generateChunkId(meetingId, index, chunkVersion);
-      const contentHash = computeContentHash(text);
-      const tokenEstimate = estimateTokens(text);
+    return groups.map((group, index) => {
+      const text = groupText(group);
+      const speakers = [
+        ...new Set(group.map((item) => item.speaker).filter(Boolean)),
+      ];
+
+      const firstTimedUnit = group.find(
+        (item) => item.startTime !== null
+      );
+
+      const reversedGroup = [...group].reverse();
+      const lastTimedUnit = reversedGroup.find(
+        (item) => item.endTime !== null
+      );
+
+      const metadata = {
+        speaker:
+          speakers.length === 1
+            ? speakers[0]
+            : speakers.length > 1
+              ? 'Multiple speakers'
+              : null,
+        startTime: firstTimedUnit ? firstTimedUnit.startTime : null,
+        endTime: lastTimedUnit ? lastTimedUnit.endTime : null,
+        tokenEstimate: estimateTokens(text),
+        meetingType,
+      };
 
       return {
         meetingId,
-        chunkId,
+        chunkId: generateChunkId(meetingId, index, chunkVersion),
         chunkVersion,
-        contentHash,
+        contentHash: computeContentHash(text),
         chunkIndex: index,
         text,
         chunkType,
-        metadata: {
-          speaker,
-          startTime: null,
-          endTime: null,
-          tokenEstimate,
-          meetingType,
-        },
+        metadata,
       };
     });
   }

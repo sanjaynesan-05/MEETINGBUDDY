@@ -38,6 +38,7 @@ class RagChatService {
       .filter(Boolean)
       .map((c) => ({
         meetingId: c.meetingId,
+        meetingTitle: c.meetingTitle || '',
         snippet: c.snippet.slice(0, 300),
         sourceLabel: c.sourceLabel,
       }));
@@ -135,9 +136,11 @@ class RagChatService {
   _injectFallbackCitations(answer, citations, chunks) {
     if (citations.length > 0) return answer;
     if (chunks.length === 0) return answer;
+    // Don't attach a "source" to an answer that says nothing was found.
+    if (/couldn.?t find that information/i.test(answer)) return answer;
 
     const top = chunks[0];
-    return answer + `\n\n---\n_Source: [${top.sourceLabel}] ${top.meetingId}_`;
+    return answer + `\n\n---\n_Source: ${top.sourceLabel} ${top.meetingTitle || top.meetingId}_`;
   }
 
    _noContextResponse(message, startTime, retrievalSource = 'none') {

@@ -1,4 +1,19 @@
 const { default: ollama } = require("ollama");
+const { Agent, setGlobalDispatcher } = require("undici");
+
+// Set global dispatcher timeouts so Node's fetch won't abort at 300s (UND_ERR_HEADERS_TIMEOUT)
+setGlobalDispatcher(new Agent({
+    headersTimeout: 900000, // 15 minutes
+    bodyTimeout: 900000,    // 15 minutes
+    connectTimeout: 60000
+}));
+
+// Per-request timeout: raise this if your GPU is slow but Ollama IS responding.
+// Default 600 s (10 minutes)
+const REQUEST_TIMEOUT_MS = parseInt(
+    process.env.OLLAMA_REQUEST_TIMEOUT_MS || process.env.REQUEST_TIMEOUT || "600000",
+    10
+);
 
 class OllamaService {
     constructor() {
@@ -54,12 +69,26 @@ class OllamaService {
 
         const executeInference = async (opts) => {
             const start = Date.now();
-            const response = await ollama.chat({
-                model: this.model,
-                format: currentOptions.format,
-                options: opts,
-                messages: [{ role: "user", content: prompt }],
-            });
+
+            // Explicit per-request timeout via AbortController.
+            const controller = new AbortController();
+            const timer = setTimeout(() => {
+                controller.abort();
+            }, REQUEST_TIMEOUT_MS);
+
+            let response;
+            try {
+                response = await ollama.chat({
+                    model: this.model,
+                    format: currentOptions.format,
+                    options: opts,
+                    messages: [{ role: "user", content: prompt }],
+                    signal: controller.signal,
+                });
+            } finally {
+                clearTimeout(timer);
+            }
+
             const duration = Date.now() - start;
             console.log(`[Ollama] Inference completed in ${duration}ms using ${opts.num_gpu === 0 ? 'CPU' : 'GPU (default)'}`);
 
@@ -92,6 +121,13 @@ class OllamaService {
             console.error("❌ Ollama Service Error");
             console.error("Model:", this.model);
             console.error("Message:", error.message);
+            // Log root cause (e.g. ECONNRESET, AbortError) for diagnosis
+            if (error.cause) {
+                console.error("Cause:", error.cause.code || error.cause.message || String(error.cause));
+            }
+            if (error.name === 'AbortError' || (error.message && error.message.includes('abort'))) {
+                console.error(`Timeout: request exceeded ${REQUEST_TIMEOUT_MS}ms (OLLAMA_REQUEST_TIMEOUT_MS)`);
+            }
             console.error("======================================");
 
             throw error;

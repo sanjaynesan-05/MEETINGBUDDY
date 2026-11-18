@@ -48,7 +48,7 @@ export default function TasksPage() {
   const handleToggleStatus = async (task) => {
     const newStatus = task.status === 'Completed' ? 'Pending' : 'Completed';
     try {
-      const res = await tasksAPI.update(task.meetingId, task.index, { status: newStatus });
+      await tasksAPI.update(task.meetingId, task.index, { status: newStatus });
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
     } catch (err) {
       console.error('Failed to update task:', err);

@@ -69,7 +69,7 @@ const bottomItems = [
   },
 ];
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed }) {
   const location = useLocation();
 
   return (

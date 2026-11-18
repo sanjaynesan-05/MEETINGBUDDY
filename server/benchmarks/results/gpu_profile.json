@@ -1,0 +1,109 @@
+{
+  "benchmark": "gpu_memory_profile",
+  "timestamp": "2026-10-31T09:03:56.637Z",
+  "model": "qwen2.5:7b",
+  "modelInfo": {
+    "modelName": "unknown",
+    "architecture": "unknown",
+    "quantization": "Q4_K_M",
+    "parameters": "7.6B",
+    "family": "qwen2",
+    "numGpuLayers": "unknown",
+    "contextLength": "unknown"
+  },
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "total_MiB": 4096
+  },
+  "baseline_used_MiB": 0,
+  "peak_used_MiB": 3431,
+  "min_free_MiB": 532,
+  "estimated_model_GiB": 3.35,
+  "gpu_fits_model": true,
+  "num_gpu_layers": "not reported",
+  "pollSeries": [
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 0,
+      "free_MiB": 3962,
+      "utilization_pct": 0,
+      "temp_C": 37,
+      "ts": 1793437421694
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 2351,
+      "free_MiB": 1612,
+      "utilization_pct": 0,
+      "temp_C": 37,
+      "ts": 1793437423086
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 2351,
+      "free_MiB": 1612,
+      "utilization_pct": 11,
+      "temp_C": 38,
+      "ts": 1793437425186
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 2351,
+      "free_MiB": 1612,
+      "utilization_pct": 0,
+      "temp_C": 38,
+      "ts": 1793437427141
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 3431,
+      "free_MiB": 532,
+      "utilization_pct": 94,
+      "temp_C": 39,
+      "ts": 1793437429227
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 3431,
+      "free_MiB": 532,
+      "utilization_pct": 16,
+      "temp_C": 41,
+      "ts": 1793437431171
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 3431,
+      "free_MiB": 532,
+      "utilization_pct": 0,
+      "temp_C": 40,
+      "ts": 1793437433165
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 3431,
+      "free_MiB": 532,
+      "utilization_pct": 5,
+      "temp_C": 40,
+      "ts": 1793437435204
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "total_MiB": 4096,
+      "used_MiB": 3431,
+      "free_MiB": 532,
+      "utilization_pct": 50,
+      "temp_C": 40,
+      "ts": 1793437436631
+    }
+  ],
+  "inference_ok": true,
+  "recommendation": "Model fits in GPU VRAM."
+}

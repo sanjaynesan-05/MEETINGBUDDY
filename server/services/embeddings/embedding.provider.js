@@ -2,6 +2,22 @@ const { default: ollama } = require('ollama');
 const { DEFAULT_MODEL } = require('./embedding.constants');
 
 /**
+ * Nomic embedding models are trained with task prefixes; documents and
+ * queries must be embedded with different prefixes or ranking degrades.
+ * https://huggingface.co/nomic-ai/nomic-embed-text-v1.5#usage
+ *
+ * @param {string} text
+ * @param {'document'|'query'} kind
+ * @param {string} model
+ */
+const applyTaskPrefix = (text, kind, model) => {
+  // EMBEDDING_TASK_PREFIX=off disables prefixes (used only for ablation runs).
+  if (process.env.EMBEDDING_TASK_PREFIX === 'off') return text;
+  if (!/nomic/i.test(model || '')) return text;
+  return (kind === 'query' ? 'search_query: ' : 'search_document: ') + text;
+};
+
+/**
  * Base Abstract Embedding Provider
  */
 class BaseEmbeddingProvider {
@@ -29,11 +45,17 @@ class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
     this.baseUrl = process.env.OLLAMA_HOST || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   }
 
-  async generateEmbeddings(texts) {
+  /**
+   * @param {string[]} texts
+   * @param {{ kind?: 'document'|'query' }} [opts] - 'document' for stored chunks, 'query' for search queries
+   */
+  async generateEmbeddings(texts, opts = {}) {
     if (!texts || texts.length === 0) return [];
+    const kind = opts.kind === 'query' ? 'query' : 'document';
 
     const results = [];
-    for (const text of texts) {
+    for (const rawText of texts) {
+      const text = applyTaskPrefix(rawText, kind, this.model);
       try {
         // Primary attempt using SDK
         let response;
@@ -70,22 +92,9 @@ class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
           dimensions: vector.length,
         });
       } catch (err) {
+        // Never substitute synthetic vectors: storing them would silently
+        // corrupt the index. Fail so the caller marks embedding as failed.
         console.error(`[OllamaEmbeddingProvider] Error embedding text with model ${this.model}:`, err.message);
-        
-        // Fallback: If model is not found, try available LLM model (e.g. qwen2.5:7b) or mock vector
-        if (err.message && err.message.includes('not found')) {
-          console.warn(`[OllamaEmbeddingProvider] Falling back to mock/fallback vector for model ${this.model}`);
-          const fallbackVector = new Array(768).fill(0).map((_, i) => {
-            const charCode = text.charCodeAt(i % text.length) || 1;
-            return parseFloat((Math.sin(charCode + i) * 0.5).toFixed(6));
-          });
-          results.push({
-            vector: fallbackVector,
-            dimensions: 768,
-          });
-          continue;
-        }
-
         throw err;
       }
     }

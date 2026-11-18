@@ -13,7 +13,8 @@ export function useAnalytics(filters = {}) {
     try {
       setLoading(true);
       setError('');
-      const res = await analyticsAPI.getDashboardData(filters);
+      // Read filters from the stable key so the callback only changes when the filter values change.
+      const res = await analyticsAPI.getDashboardData(JSON.parse(filtersKey));
       setData(res.data.data);
     } catch (err) {
       console.error('Failed to load analytics:', err);

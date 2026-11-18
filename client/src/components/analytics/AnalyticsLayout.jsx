@@ -1,6 +1,5 @@
 import React from 'react';
 import { RefreshCw } from 'lucide-react';
-import DashboardHeader from '../../components/dashboard/DashboardHeader'; // Reuse the header if appropriate, or build a simplified title
 
 export default function AnalyticsLayout({ 
   children, 

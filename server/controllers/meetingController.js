@@ -173,7 +173,11 @@ const processTranscription = async (meetingId, filePath) => {
     console.log(`Meeting completed`);
     
     // Trigger embedding generation asynchronously in background
-    embeddingService.processMeetingEmbeddings(meetingId, result.text).catch((err) => {
+    embeddingService.processMeetingEmbeddings(meetingId, result.text, {
+      transcriptSegments,
+      chunkType: 'Transcript',
+      meetingType: '',
+    }).catch((err) => {
       console.error(`⚠️ Non-fatal embedding generation error for meeting ${meetingId}:`, err.message);
     });
 
@@ -404,3 +408,4 @@ module.exports = {
   getAnalysis,
   deleteMeeting,
 };
+

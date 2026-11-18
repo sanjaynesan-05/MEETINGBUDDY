@@ -64,10 +64,11 @@ const chatLimiter = rateLimit({
 });
 
 // Apply rate limiters
-app.use('/api/auth', authLimiter);
+// Brute-force protection applies to credential endpoints only. The profile
+// check runs on every page load and must not count against this budget.
+app.use(['/api/auth/login', '/api/auth/register'], authLimiter);
 app.use('/api/search', searchLimiter);
 app.use('/api/chat', chatLimiter);
-app.use('/api/ai', chatLimiter);
 
 // NOTE: uploaded recordings are intentionally NOT served statically —
 // meeting audio is private and must only be reachable through authenticated,
@@ -90,13 +91,13 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/meetings', require('./routes/meetings'));
 app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/ai', require('./middleware/auth'), require('./src/modules/ai/routes/ai.routes'));
 app.use('/api/analytics', require('./routes/analytics.routes.js'));
 app.use('/api/search', require('./routes/search.routes.js'));
 app.use('/api/chat', require('./routes/chat.routes.js'));
 app.use('/api', require('./routes/calendar.routes.js'));
 app.use('/api/notifications', require('./routes/notification.routes.js'));
 app.use('/api/tasks', require('./routes/tasks.routes.js'));
+app.use('/api/system', require('./routes/system.routes.js'));
 
 app.use((req, res) => {
   res.status(404).json({

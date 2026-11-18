@@ -1,0 +1,378 @@
+{
+  "benchmark": "extraction_parallel_vs_sequential_v2",
+  "timestamp": "2026-10-31T09:42:46.018Z",
+  "runId": "2026-10-31T09-04-37-207Z",
+  "configuration": {
+    "model": "qwen2.5:7b",
+    "source": "db",
+    "numStages": 9,
+    "OLLAMA_NUM_PARALLEL": "4",
+    "OLLAMA_MAX_LOADED_MODELS": "1",
+    "OLLAMA_REQUEST_TIMEOUT_MS": "360000",
+    "hardware": {
+      "cpu": "12th Gen Intel Core i5-12450H (12 cores)",
+      "gpu": "NVIDIA RTX 3050 Laptop (CUDA 12.8, 4 GB VRAM)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0",
+      "gpuBefore": "NVIDIA GeForce RTX 3050 Laptop GPU, 4096 MiB, 601 MiB, 3362 MiB, 0 %",
+      "gpuAfter": "NVIDIA GeForce RTX 3050 Laptop GPU, 4096 MiB, 3433 MiB, 530 MiB, 30 %"
+    }
+  },
+  "runs": [
+    {
+      "runNumber": 1,
+      "transcriptChars": 24015,
+      "sequential": {
+        "wallClockMs": 478409,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 68956,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 56062,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 69977,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 142649,
+            "status": "Success"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 8478,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 33064,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 47276,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 17652,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 34237,
+            "status": "Success"
+          }
+        ]
+      },
+      "parallel": {
+        "wallClockMs": 306712,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 57533,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 306710,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 129876,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 270807,
+            "status": "Success"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 306709,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 301912,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 306707,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 306706,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 306703,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          }
+        ]
+      },
+      "speedup": 1.56
+    },
+    {
+      "runNumber": 2,
+      "transcriptChars": 24015,
+      "sequential": {
+        "wallClockMs": 454127,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 57265,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 57088,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 70727,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 136059,
+            "status": "Success"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 8747,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 31395,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 45406,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 15711,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 31725,
+            "status": "Success"
+          }
+        ]
+      },
+      "parallel": {
+        "wallClockMs": 306537,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 306536,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 108532,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 46468,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 306533,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 306533,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 225451,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 194042,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 61142,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 139805,
+            "status": "Success"
+          }
+        ]
+      },
+      "speedup": 1.481
+    },
+    {
+      "runNumber": 3,
+      "transcriptChars": 24015,
+      "sequential": {
+        "wallClockMs": 436419,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 51925,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 55546,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 68313,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 132171,
+            "status": "Success"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 8220,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 30693,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 43704,
+            "status": "Success"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 15378,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 30467,
+            "status": "Success"
+          }
+        ]
+      },
+      "parallel": {
+        "wallClockMs": 306497,
+        "stages": [
+          {
+            "name": "Summary Extraction",
+            "inferenceTime_ms": 51313,
+            "status": "Success"
+          },
+          {
+            "name": "Agenda Extraction",
+            "inferenceTime_ms": 107438,
+            "status": "Success"
+          },
+          {
+            "name": "Decision Extraction",
+            "inferenceTime_ms": 207062,
+            "status": "Success"
+          },
+          {
+            "name": "Action Item Extraction",
+            "inferenceTime_ms": 306496,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Risk Extraction",
+            "inferenceTime_ms": 260877,
+            "status": "Success"
+          },
+          {
+            "name": "Question Extraction",
+            "inferenceTime_ms": 137958,
+            "status": "Success"
+          },
+          {
+            "name": "Entity Extraction",
+            "inferenceTime_ms": 306495,
+            "status": "Failed",
+            "error": "fetch failed",
+            "cause": "UND_ERR_HEADERS_TIMEOUT"
+          },
+          {
+            "name": "Classifier",
+            "inferenceTime_ms": 221767,
+            "status": "Success"
+          },
+          {
+            "name": "Conversation Intelligence",
+            "inferenceTime_ms": 253121,
+            "status": "Success"
+          }
+        ]
+      },
+      "speedup": 1.424
+    }
+  ],
+  "aggregate": {
+    "n": 3,
+    "sequential": {
+      "mean_ms": 456318,
+      "std_ms": 21081
+    },
+    "parallel": {
+      "mean_ms": 306582,
+      "std_ms": 114
+    },
+    "speedup": {
+      "mean_x": 1.488,
+      "std_x": 0.068
+    },
+    "latencyReductionPercent": {
+      "mean_pct": 32.81
+    },
+    "totalParallelStageFailed": 10
+  }
+}

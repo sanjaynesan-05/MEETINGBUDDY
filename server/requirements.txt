@@ -1,0 +1,22 @@
+# Python dependencies for scripts/transcribe.py (speech-to-text + optional diarization).
+# Versions are the ones the project was tested with (Python 3.11, Windows, RTX 3050).
+#
+# GPU (CUDA 12.8) install — run this first so pip picks the CUDA build of PyTorch:
+#   pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+# CPU-only machines can skip that line; faster-whisper falls back to CPU int8 automatically.
+#
+# Then:
+#   pip install -r requirements.txt
+
+faster-whisper==1.2.1     # primary transcription engine (CTranslate2)
+ctranslate2==4.8.1        # CUDA float16 / CPU int8 inference backend
+av==18.0.0                # audio decoding used by faster-whisper
+numpy==2.4.6
+openai-whisper==20250625  # fallback engine if faster-whisper is unavailable
+torch==2.11.0
+torchaudio==2.11.0
+
+# Optional: speaker diarization (ENABLE_DIARIZATION=true, needs HF_TOKEN).
+# Note: torchcodec 0.7 does not load against FFmpeg 8 on Windows; diarization
+# then needs FFmpeg 4–7 on PATH, or audio passed to pyannote as a waveform.
+pyannote.audio==4.0.7

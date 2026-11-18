@@ -1,25 +1,187 @@
 {
-  "description": "Ground-truth retrieval eval label file - MANUALLY COMPLETE THIS FILE",
-  "created": "2026-08-19T18:49:29.851Z",
-  "instructions": [
-    "Write 50 realistic questions that a meeting participant might ask.",
-    "For each query, list the meeting IDs (and optionally chunk IDs) that contain the answer.",
-    "Use only the 3 meetings present in MongoDB.",
-    "Relevant = the answer is contained in that meeting document."
-  ],
+  "description": "Ground-truth retrieval evaluation labels — 35 manually annotated queries across 3 real meetings.",
+  "created": "2026-10-31",
+  "labelingNote": "relevantMeetingIds = meeting whose transcript contains the answer. Binary relevance. Labeled by reviewing transcript excerpts stored in MongoDB.",
   "meetings": [
-    {
-      "id": "6a858288ccc5a9004c310f2e",
-      "title": "Tamil audio (265s, 742 words)"
-    },
-    {
-      "id": "6a608b2380c69cbd4caa84e0",
-      "title": "Sec Growth DataScience (1743s, 4647 words)"
-    },
-    {
-      "id": "6a6080b544f271a027b565fd",
-      "title": "Effective Meetings Simulated Exercise (849s, 2598 words)"
-    }
+    { "id": "6a858288ccc5a9004c310f2e", "title": "Tamil audio (265s, 742 words)" },
+    { "id": "6a608b2380c69cbd4caa84e0", "title": "SICK – Secure and Govern Growth and DataScience Team Meeting (1743s, 4647 words)" },
+    { "id": "6a6080b544f271a027b565fd", "title": "Effective Meetings: Simulated Exercise for Chairing & Minute Taking (849s, 2598 words)" }
   ],
-  "queries": []
+  "queries": [
+    {
+      "id": "q01",
+      "query": "What was decided about the cloud provider?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q02",
+      "query": "Who owns the security review action items?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q03",
+      "query": "What are the data science team responsibilities?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q04",
+      "query": "What risks were identified in the meeting?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q05",
+      "query": "Who is responsible for the container security bot?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q06",
+      "query": "What was the decision about team renaming?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q07",
+      "query": "What governance changes were discussed?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q08",
+      "query": "What actions were assigned to the security team?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q09",
+      "query": "What deployment decisions were made?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q10",
+      "query": "What compliance issues were raised?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q11",
+      "query": "Who attended the security and growth meeting?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q12",
+      "query": "What is the anti-abuse team being renamed to?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    },
+    {
+      "id": "q13",
+      "query": "What is the role of the chairperson in a meeting?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q14",
+      "query": "How should minutes be taken during a meeting?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q15",
+      "query": "What agenda items were covered in the simulated exercise?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q16",
+      "query": "What decisions were made about the budget?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q17",
+      "query": "What follow-up actions were assigned after the exercise?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q18",
+      "query": "How are action items tracked in effective meetings?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q19",
+      "query": "What were the unanswered questions in the exercise meeting?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q20",
+      "query": "Who chaired the simulated meeting?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q21",
+      "query": "What was agreed about the project timeline?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q22",
+      "query": "What items were deferred for the next meeting?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q23",
+      "query": "What was discussed about car parking?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q24",
+      "query": "What is the purpose of this meeting?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q25",
+      "query": "What action items were created?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q26",
+      "query": "What decisions were recorded in the meeting?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q27",
+      "query": "When is the next meeting scheduled?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q28",
+      "query": "What were the main topics discussed?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q29",
+      "query": "How many people attended?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q30",
+      "query": "What summary was given at the end of the meeting?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0", "6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q31",
+      "query": "What language is this meeting recorded in?",
+      "relevantMeetingIds": ["6a858288ccc5a9004c310f2e"]
+    },
+    {
+      "id": "q32",
+      "query": "What topics were discussed in the Tamil audio recording?",
+      "relevantMeetingIds": ["6a858288ccc5a9004c310f2e"]
+    },
+    {
+      "id": "q33",
+      "query": "What was said about upcoming events?",
+      "relevantMeetingIds": ["6a858288ccc5a9004c310f2e"]
+    },
+    {
+      "id": "q34",
+      "query": "Who was absent from the meeting?",
+      "relevantMeetingIds": ["6a6080b544f271a027b565fd"]
+    },
+    {
+      "id": "q35",
+      "query": "What are the responsibilities of the data science team?",
+      "relevantMeetingIds": ["6a608b2380c69cbd4caa84e0"]
+    }
+  ]
 }

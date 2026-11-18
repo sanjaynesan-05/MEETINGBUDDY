@@ -1,7 +1,74 @@
 {
   "benchmark": "retrieval_evaluation",
-  "timestamp": "2026-08-19T18:57:49.611Z",
-  "status": "NOT_MEASURED",
-  "reason": "Ground-truth label file exists but contains 0 labeled queries (template only). Manual labeling required.",
-  "benchmarkSpecFile": "D:\\final year project\\server\\benchmarks\\data\\retrieval_ground_truth.json"
+  "timestamp": "2026-11-18T14:03:46.346Z",
+  "status": "MEASURED",
+  "nQueries": 35,
+  "kValues": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "methods": {
+    "keyword": {
+      "P@1": 0,
+      "R@1": 0,
+      "nDCG@1": 0,
+      "P@3": 0,
+      "R@3": 0,
+      "nDCG@3": 0,
+      "P@5": 0,
+      "R@5": 0,
+      "nDCG@5": 0,
+      "P@10": 0,
+      "R@10": 0,
+      "nDCG@10": 0,
+      "MRR": 0
+    },
+    "keyword_chunk": {
+      "P@1": 0.8,
+      "R@1": 0.6714,
+      "nDCG@1": 0.8,
+      "P@3": 0.5952,
+      "R@3": 0.9429,
+      "nDCG@3": 0.8864,
+      "P@5": 0.5952,
+      "R@5": 0.9429,
+      "nDCG@5": 0.8864,
+      "P@10": 0.5952,
+      "R@10": 0.9429,
+      "nDCG@10": 0.8864,
+      "MRR": 0.8667
+    },
+    "vector": {
+      "P@1": 0.8,
+      "R@1": 0.6714,
+      "nDCG@1": 0.8,
+      "P@3": 0.5571,
+      "R@3": 1,
+      "nDCG@3": 0.9164,
+      "P@5": 0.5571,
+      "R@5": 1,
+      "nDCG@5": 0.9164,
+      "P@10": 0.5571,
+      "R@10": 1,
+      "nDCG@10": 0.9164,
+      "MRR": 0.8905
+    },
+    "hybrid": {
+      "P@1": 0.7143,
+      "R@1": 0.5857,
+      "nDCG@1": 0.7143,
+      "P@3": 0.5381,
+      "R@3": 1,
+      "nDCG@3": 0.8871,
+      "P@5": 0.5381,
+      "R@5": 1,
+      "nDCG@5": 0.8871,
+      "P@10": 0.5381,
+      "R@10": 1,
+      "nDCG@10": 0.8871,
+      "MRR": 0.8476
+    }
+  }
 }

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import ChartCard from './ChartCard';
 
 const ENGAGEMENT_COLORS = {
@@ -41,7 +41,7 @@ export default function EngagementChart({ engagement }) {
           <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Meetings">
             {
               chartData.map((entry, index) => (
-                <cell key={`cell-${index}`} fill={ENGAGEMENT_COLORS[entry.name]} />
+                <Cell key={`cell-${index}`} fill={ENGAGEMENT_COLORS[entry.name]} />
               ))
             }
           </Bar>

@@ -1,0 +1,20 @@
+# Local infrastructure for MeetingBuddy.
+#   docker compose up -d qdrant
+#
+# MongoDB and Ollama run natively on the host in the reference setup
+# (see README). Vector data is kept in the named volume `qdrant-data`, so it
+# survives container re-creation. If the volume is ever lost, rebuild it from
+# MongoDB with:  node server/scripts/reindex-embeddings.js
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    container_name: meetingbuddy-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"   # REST
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+volumes:
+  qdrant-data:

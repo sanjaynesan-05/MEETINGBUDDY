@@ -69,8 +69,15 @@ export function AuthProvider({ children }) {
           type: ACTIONS.SET_USER,
           payload: res.data.user,
         });
-      } catch {
-        dispatch({ type: ACTIONS.LOGOUT });
+      } catch (err) {
+        // Only an explicit rejection of the session means "signed out".
+        // A network blip, rate limit or server error keeps the cached user;
+        // the next authenticated request will surface a real 401 if needed.
+        if (err.response?.status === 401 || !localStorage.getItem('user')) {
+          dispatch({ type: ACTIONS.LOGOUT });
+        } else {
+          dispatch({ type: ACTIONS.SET_LOADING, payload: false });
+        }
       }
     };
 

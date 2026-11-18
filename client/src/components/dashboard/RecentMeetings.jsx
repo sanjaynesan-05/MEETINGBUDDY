@@ -19,7 +19,7 @@ export default function RecentMeetings({ meetings = [], onUpdate }) {
       try {
         await meetingAPI.delete(id);
         if (onUpdate) onUpdate();
-      } catch(err) {
+      } catch {
         alert('Failed to delete');
       }
     }

@@ -1,6 +1,7 @@
 const { qdrantClient, COLLECTION_NAME, QDRANT_ENABLED, searchPoints } = require('../embeddings/qdrantStorage');
 const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('./search.constants');
 const { buildOwnershipCondition } = require('./meetingAccess');
+const embeddingProviderFactory = require('../embeddings/embedding.factory');
 
 class VectorSearchService {
   async search(query, params = {}) {
@@ -111,17 +112,11 @@ class VectorSearchService {
   async _generateEmbedding(text) {
     if (!QDRANT_ENABLED) return null;
     try {
-      const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-      const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
-      const response = await fetch(`${OLLAMA_URL}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: EMBEDDING_MODEL, prompt: text }),
-        signal: AbortSignal.timeout(30000),
-      });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return data.embedding;
+      // Same provider (and therefore same model/endpoint) as stored chunks,
+      // with the query-side task prefix.
+      const provider = embeddingProviderFactory.getProvider();
+      const [result] = await provider.generateEmbeddings([text], { kind: 'query' });
+      return result ? result.vector : null;
     } catch (err) {
       console.error('[VectorSearch] Embedding generation error:', err.message);
       return null;

@@ -1,0 +1,277 @@
+{
+  "benchmark": "rag_system_performance_v2",
+  "timestamp": "2026-10-31T08:41:46.075Z",
+  "qdrantAvailable": true,
+  "configuration": {
+    "model": "qwen2.5:7b",
+    "embeddingModel": "nomic-embed-text",
+    "temperature": "0.3",
+    "retrievalTopK": "10",
+    "maxContextChars": "10000",
+    "hardware": {
+      "cpu": "12th Gen Intel Core i5-12450H (12 cores)",
+      "gpu": "NVIDIA RTX 3050 Laptop (CUDA 12.8, 4 GB VRAM)",
+      "ramGB": 16,
+      "os": "Windows 11",
+      "node": "v22.14.0"
+    }
+  },
+  "questions": [
+    {
+      "question": "What was decided about the cloud provider?",
+      "runs": [
+        {
+          "run": 1,
+          "queryEmbeddingMs": 105,
+          "qdrantSearchMs": 29,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 98,
+          "chunksRetrieved": 1,
+          "contextChars": 472,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 15581,
+          "generationMs": 15483,
+          "answerLength": 0
+        },
+        {
+          "run": 2,
+          "queryEmbeddingMs": 2956,
+          "qdrantSearchMs": 62,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 78,
+          "chunksRetrieved": 1,
+          "contextChars": 472,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11794,
+          "generationMs": 11716,
+          "answerLength": 65
+        },
+        {
+          "run": 3,
+          "queryEmbeddingMs": 2882,
+          "qdrantSearchMs": 54,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 63,
+          "chunksRetrieved": 1,
+          "contextChars": 472,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11285,
+          "generationMs": 11222,
+          "answerLength": 65
+        }
+      ]
+    },
+    {
+      "question": "Who owns the security review actions?",
+      "runs": [
+        {
+          "run": 1,
+          "queryEmbeddingMs": 2697,
+          "qdrantSearchMs": 51,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 68,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 10848,
+          "generationMs": 10780,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "queryEmbeddingMs": 2826,
+          "qdrantSearchMs": 37,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 59,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 10640,
+          "generationMs": 10581,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "queryEmbeddingMs": 2791,
+          "qdrantSearchMs": 39,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 85,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 10916,
+          "generationMs": 10831,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "What was discussed about car parking?",
+      "runs": [
+        {
+          "run": 1,
+          "queryEmbeddingMs": 2848,
+          "qdrantSearchMs": 47,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 62,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11624,
+          "generationMs": 11562,
+          "answerLength": 65
+        },
+        {
+          "run": 2,
+          "queryEmbeddingMs": 2899,
+          "qdrantSearchMs": 39,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 75,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11520,
+          "generationMs": 11445,
+          "answerLength": 65
+        },
+        {
+          "run": 3,
+          "queryEmbeddingMs": 2998,
+          "qdrantSearchMs": 33,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 81,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11252,
+          "generationMs": 11171,
+          "answerLength": 65
+        }
+      ]
+    },
+    {
+      "question": "What are the main risks discussed?",
+      "runs": [
+        {
+          "run": 1,
+          "queryEmbeddingMs": 2930,
+          "qdrantSearchMs": 47,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 60,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11515,
+          "generationMs": 11455,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "queryEmbeddingMs": 2700,
+          "qdrantSearchMs": 38,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 95,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11877,
+          "generationMs": 11782,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "queryEmbeddingMs": 2927,
+          "qdrantSearchMs": 31,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 64,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 10551,
+          "generationMs": 10487,
+          "answerLength": 107
+        }
+      ]
+    },
+    {
+      "question": "How many people attended?",
+      "runs": [
+        {
+          "run": 1,
+          "queryEmbeddingMs": 2897,
+          "qdrantSearchMs": 14,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 78,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11349,
+          "generationMs": 11271,
+          "answerLength": 107
+        },
+        {
+          "run": 2,
+          "queryEmbeddingMs": 2771,
+          "qdrantSearchMs": 26,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 61,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11238,
+          "generationMs": 11177,
+          "answerLength": 107
+        },
+        {
+          "run": 3,
+          "queryEmbeddingMs": 2810,
+          "qdrantSearchMs": 14,
+          "qdrantHits": 8,
+          "totalRetrievalMs": 74,
+          "chunksRetrieved": 1,
+          "contextChars": 496,
+          "retrievalSource": "hybrid",
+          "endToEndMs": 11794,
+          "generationMs": 11720,
+          "answerLength": 107
+        }
+      ]
+    }
+  ],
+  "aggregate": {
+    "queryEmbeddingMs": {
+      "label": "query_embedding_via_ollama",
+      "n": 15,
+      "mean_ms": 2669.1,
+      "std_ms": 714.8,
+      "min_ms": 105,
+      "max_ms": 2998
+    },
+    "qdrantSearchMs": {
+      "label": "qdrant_ann_search",
+      "n": 15,
+      "mean_ms": 37.4,
+      "std_ms": 13.7,
+      "min_ms": 14,
+      "max_ms": 62
+    },
+    "totalRetrievalMs": {
+      "label": "total_retrieval_embedding+search",
+      "n": 15,
+      "mean_ms": 73.4,
+      "std_ms": 12.6,
+      "min_ms": 59,
+      "max_ms": 98
+    },
+    "endToEndMs": {
+      "label": "end_to_end_retrieval+generation",
+      "n": 15,
+      "mean_ms": 11585.6,
+      "std_ms": 1179.6,
+      "min_ms": 10551,
+      "max_ms": 15581
+    },
+    "qdrantAvailable": true,
+    "retrievalSourceNote": "Qdrant running: hybrid search active"
+  }
+}

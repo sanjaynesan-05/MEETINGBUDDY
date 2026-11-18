@@ -85,7 +85,6 @@ meeting-intelligence/
 │   ├── routes/             # API endpoint definitions
 │   ├── scripts/            # Python transcription (transcribe.py) & maintenance scripts
 │   ├── services/           # Transcription, AI extraction, embeddings, search, analytics, calendar
-│   ├── src/modules/ai/     # Modular RAG pipeline exposed under /api/ai
 │   ├── tests/              # Manual test scripts
 │   └── uploads/            # Private storage for audio/video files (not publicly served)
 │
@@ -110,6 +109,8 @@ Ensure you have the following installed on your host machine:
 * **Python** (v3.10 or higher, added to PATH)
 * **MongoDB** (Running locally on port `27017` or a cloud MongoDB Atlas cluster)
 * **FFmpeg** (Required for Whisper audio decoding. Must be added to PATH or specified in `.env`)
+* **Ollama** with the models `qwen2.5:7b` and `nomic-embed-text` (`ollama pull qwen2.5:7b` and `ollama pull nomic-embed-text`)
+* **Docker** (runs the Qdrant vector database)
 
 ### 1. Repository Setup
 
@@ -126,12 +127,26 @@ Navigate to the server directory, install Node dependencies, and prepare the Pyt
 cd server
 npm install
 
-# Install required Python ML packages
-pip install faster-whisper openai-whisper torch av
+# Install the Python speech-to-text packages (see requirements.txt for the CUDA PyTorch line)
+pip install -r requirements.txt
 
 # Ensure the uploads directory exists
 mkdir uploads
 ```
+
+**Vector database (Qdrant):** from the repository root, start Qdrant with a persistent volume:
+
+```bash
+docker compose up -d qdrant
+```
+
+If the vector index is ever empty or out of sync with MongoDB (for example after changing the chunking or embedding settings), rebuild it from the stored transcripts:
+
+```bash
+node scripts/reindex-embeddings.js
+```
+
+The **Settings** page in the app shows whether MongoDB, Qdrant, Ollama and Whisper are connected, and how many of your meetings are indexed.
 
 **Environment Configuration:**
 Create a `.env` file in the `server` directory (reference `.env.example`):

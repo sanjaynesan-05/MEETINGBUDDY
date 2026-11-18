@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { data, Link, Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
-  const { login, isAuthenticated, loading, error, clearError } = useAuth();
+  const { login, isAuthenticated, error, clearError } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});

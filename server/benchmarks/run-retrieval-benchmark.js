@@ -36,6 +36,7 @@ const mongoose = require('mongoose');
 const searchService = require('../services/search/search.service');
 const rrfService = require('../services/search/rrf.service');
 const vectorSearchService = require('../services/search/vectorSearch.service');
+const chunkKeywordService = require('../services/search/chunkKeyword.service');
 
 const RESULTS_DIR = path.join(__dirname, 'results');
 const GROUND_TRUTH_FILE = path.join(__dirname, 'data', 'retrieval_ground_truth.json');
@@ -219,9 +220,13 @@ async function main() {
         return [];
       }
     },
+    keyword_chunk: async (q) => {
+      const res = await chunkKeywordService.search(q, { limit: 20, unscoped: true });
+      return res.map((r) => r.meetingId.toString());
+    },
     hybrid: async (q) => {
       try {
-        const res = await rrfService.hybridSearch(userId, { q, limit: 10 });
+        const res = await rrfService.hybridSearch(userId, { q, limit: 20, unscoped: true });
         return (res.results || []).map((r) => (r.meetingId || '').toString());
       } catch (e) {
         return [];
@@ -229,8 +234,14 @@ async function main() {
     },
   };
 
+  // Labels are meeting-level, but vector/hybrid return chunks, so the same
+  // meeting can appear several times. Collapse to a meeting ranking (first
+  // occurrence wins); otherwise one meeting is counted as several hits and
+  // Recall/nDCG can exceed 1.
+  const toMeetingRanking = (ids) => [...new Set(ids)];
+
   const kValues = [1, 3, 5, 10];
-  const summary = { keyword: {}, vector: {}, hybrid: {} };
+  const summary = { keyword: {}, keyword_chunk: {}, vector: {}, hybrid: {} };
 
   for (const method of Object.keys(evaluators)) {
     const fn = evaluators[method];
@@ -249,7 +260,7 @@ async function main() {
       const relevant = (query.relevantMeetingIds || []).map(String);
       let retrieved;
       try {
-        retrieved = (await fn(query.query)).map(String);
+        retrieved = toMeetingRanking((await fn(query.query)).map(String));
       } catch (e) {
         retrieved = [];
       }

@@ -284,7 +284,10 @@ const checkWhisperAvailability = () => {
 
       execFile(
         pythonExe,
-        ['-c', 'try:\n from faster_whisper import WhisperModel; print("faster-whisper")\nexcept ImportError:\n print("not-installed")'],
+        // Locate the packages without importing them: importing faster_whisper
+        // loads torch/CUDA libraries and can take 20s+ on a cold start, which
+        // made this check time out and report Whisper as unavailable.
+        ['-c', 'import importlib.util as u\nprint("faster-whisper" if u.find_spec("faster_whisper") else ("openai-whisper" if u.find_spec("whisper") else "not-installed"))'],
         { timeout: 10000 },
         (err, out) => {
           if (err) {

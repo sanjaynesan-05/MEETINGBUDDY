@@ -1,3 +1,5 @@
+> **Note (November 2026):** the separate `/api/ai` module described in this phase was removed. It duplicated the RAG pipeline and was never used by the frontend. RAG chat is served by `POST /api/chat` (`server/services/ai/ragChat.service.js`).
+
 # Phase 2: RAG & Enterprise AI Intelligence Engine
 
 This document outlines the detailed architecture and implementation steps completed during Phase 2 of the AI Meeting Intelligence System. Phase 2 focused on transforming raw meeting transcripts into a highly intelligent, stateful Retrieval-Augmented Generation (RAG) system capable of answering contextual queries with accurate citations and confidence scores.

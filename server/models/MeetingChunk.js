@@ -88,4 +88,12 @@ const meetingChunkSchema = new mongoose.Schema(
 // Compound index for efficient index-based retrieval per meeting
 meetingChunkSchema.index({ meetingId: 1, chunkIndex: 1 });
 
+// Full-text index for chunk-level lexical retrieval (keyword leg of hybrid RAG).
+// language_override points at an unused field so chunk metadata can never
+// switch the stemmer by accident.
+meetingChunkSchema.index(
+  { text: 'text' },
+  { name: 'chunk_text_search', default_language: 'english', language_override: '_textLanguage' }
+);
+
 module.exports = mongoose.model('MeetingChunk', meetingChunkSchema);

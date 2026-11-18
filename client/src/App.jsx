@@ -1,95 +1,55 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useState, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Navbar from './components/layout/Navbar';
 import Sidebar from './components/layout/Sidebar';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Meetings from './pages/Meetings';
-import MeetingUpload from './pages/MeetingUpload';
-import MeetingTranscript from './pages/MeetingTranscript';
-import AIChatPage from './pages/AIChatPage';
-import TasksPage from './pages/TasksPage';
-import AnalyticsDashboard from './pages/AnalyticsDashboard';
-import SearchPage from './pages/SearchPage';
+
+// Pages are loaded on demand so the first load doesn't download every page
+// (and heavy libraries such as the charting code) up front.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Meetings = lazy(() => import('./pages/Meetings'));
+const MeetingUpload = lazy(() => import('./pages/MeetingUpload'));
+const MeetingTranscript = lazy(() => import('./pages/MeetingTranscript'));
+const AIChatPage = lazy(() => import('./pages/AIChatPage'));
+const TasksPage = lazy(() => import('./pages/TasksPage'));
+const AnalyticsDashboard = lazy(() => import('./pages/AnalyticsDashboard'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 // Layout for authenticated pages (with Navbar + Sidebar)
 function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="app-layout">
       <Navbar onMenuToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
+      <Sidebar collapsed={sidebarCollapsed} />
       <main
         className={`app-main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
       >
+        <ErrorBoundary resetKey={location.pathname}>
+        <Suspense fallback={<LoadingSpinner />}>
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/meetings" element={<Meetings />} />
           <Route path="/meetings/upload" element={<MeetingUpload />} />
           <Route path="/meetings/:id" element={<MeetingTranscript />} />
           <Route path="/chat" element={<AIChatPage />} />
-          {/* Future routes for Week 3+ */}
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/analytics" element={<AnalyticsDashboard />} />
           <Route path="/search" element={<SearchPage />} />
-          <Route path="/settings" element={<ComingSoon title="Settings" />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </Suspense>
+        </ErrorBoundary>
       </main>
-    </div>
-  );
-}
-
-// Placeholder page for future features
-function ComingSoon({ title }) {
-  return (
-    <div className="page-content">
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '60vh',
-        textAlign: 'center',
-      }}>
-        <div style={{
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          background: 'var(--md-primary-container)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 'var(--space-6)',
-        }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="var(--md-primary)">
-            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
-          </svg>
-        </div>
-        <h1 style={{
-          fontSize: 'var(--text-2xl)',
-          fontWeight: 500,
-          color: 'var(--md-on-surface)',
-          marginBottom: 'var(--space-2)',
-        }}>
-          {title}
-        </h1>
-        <p style={{
-          fontSize: 'var(--text-md)',
-          color: 'var(--md-on-surface-variant)',
-          maxWidth: '400px',
-        }}>
-          This feature is coming soon. Check back in the next update!
-        </p>
-      </div>
     </div>
   );
 }

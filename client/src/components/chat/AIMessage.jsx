@@ -6,7 +6,7 @@ import ConfidenceBadge from './ConfidenceBadge';
 import CitationCard from './CitationCard';
 import MessageToolbar from './MessageToolbar';
 
-const AIMessage = ({ content, confidence, citations = [], metadata, id }) => {
+const AIMessage = ({ content, confidence, citations = [], metadata }) => {
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = () => {
