@@ -18,14 +18,15 @@ Built as a robust foundation for a comprehensive meeting intelligence platform, 
 * **Secure Authentication:** JWT-based user registration and login with bcrypt password hashing, HTTP-only cookies, and rate limiting.
 * **Seamless Media Uploads:** Drag-and-drop interface supporting major audio/video formats (MP3, WAV, M4A, MP4, etc.) up to 100MB.
 * **Privacy-First AI Transcription:** Utilizes `faster-whisper` (CTranslate2, int8 quantization) running entirely on your own machine (CUDA GPU with float16 when available, automatic fallback to CPU int8), ensuring sensitive meeting data never leaves your server.
-* **Speaker Diarization:** Identifies and separates multiple speakers dynamically using `pyannote.audio`.
-* **Real-Time Progress Tracking:** Live transcription progress streamed from Python to the Node.js backend and displayed dynamically on the React frontend.
+* **Speaker Diarization (optional):** Labels speakers with `pyannote.audio` when `ENABLE_DIARIZATION=true` and a Hugging Face token with access to the pyannote models is set (see Troubleshooting).
+* **Processing Queue & Progress Tracking:** Uploads are processed one at a time by a background queue (the GPU is shared), with live stage updates (queued → transcribing → analyzing → indexing). Interrupted jobs are resumed automatically when the server restarts.
+* **Re-process Meetings:** Re-run transcription, AI analysis, or search indexing for any meeting from its page.
 * **AI Summarization & Action Items:** Automatic generation of meeting minutes, key takeaways, and action items utilizing a local Ollama integration (e.g. `qwen2.5:7b`).
 * **Interactive Transcript Viewer:** Full-text search with match highlighting, one-click clipboard copying, and `.txt` file downloading.
-* **Enterprise RAG Chat Engine:** Chat with your meeting history using a locally hosted vector database (Qdrant) and hybrid retrieval (RRF). Features include dynamic prompt orchestration, response citations, and conversational memory across the session.
+* **Enterprise RAG Chat Engine:** Chat with your meeting history using a locally hosted vector database (Qdrant) and hybrid retrieval (RRF). Answers stream in word by word, cite the meeting passages they use, and keep conversational context across the session.
 * **Sentiment & Emotion Analysis:** Understand the tone and emotional trajectory of discussions dynamically.
 * **Analytics Dashboard:** Visualize meeting durations, speaker participation, and organizational trends.
-* **Calendar & Notifications:** ICS calendar export and automated action-item reminders (Google & Outlook integrations).
+* **Calendar & Notifications:** ICS calendar export of action items and a daily in-app reminder job (email when SMTP is configured). Google/Outlook sync is not wired up yet.
 * **Robust Error Handling:** Decoupled AI processing ensures transcripts are saved even if LLM analysis fails. Fallback from `faster-whisper` to `openai-whisper` ensures reliable transcription.
 
 ---
@@ -208,12 +209,30 @@ npm run dev
 | `POST` | `/api/auth/register` | Register a new user | ❌ |
 | `POST` | `/api/auth/login` | Authenticate and retrieve JWT | ❌ |
 | `GET`  | `/api/auth/profile` | Retrieve current authenticated user | ✅ |
-| `POST` | `/api/meetings/upload` | Upload media & trigger transcription | ✅ |
+| `POST` | `/api/meetings/upload` | Upload media; queues transcription, analysis and indexing | ✅ |
 | `GET`  | `/api/meetings` | Retrieve user's meeting history | ✅ |
-| `GET`  | `/api/meetings/:id` | Fetch specific meeting & transcript | ✅ |
-| `DELETE`| `/api/meetings/:id` | Permanently delete meeting & media | ✅ |
-| `POST` | `/api/chat/message` | Ask RAG chatbot a question | ✅ |
-| `GET`  | `/api/calendar/ics` | Export action items as ICS | ✅ |
+| `GET`  | `/api/meetings/:id` | Fetch a meeting (incl. `status` and `processingStage`) | ✅ |
+| `GET`  | `/api/meetings/:id/media` | Stream the original recording (owner only) | ✅ |
+| `POST` | `/api/meetings/:id/reprocess` | Re-run processing; body `{ "mode": "full" \| "analysis" \| "embeddings" }` | ✅ |
+| `DELETE`| `/api/meetings/:id` | Permanently delete meeting, media and index entries | ✅ |
+| `GET`  | `/api/meetings/:id/calendar/ics` | Export the meeting's action items as ICS | ✅ |
+| `POST` | `/api/chat` | Ask the RAG assistant (full answer) | ✅ |
+| `POST` | `/api/chat/stream` | Ask the RAG assistant, streamed as Server-Sent Events | ✅ |
+| `GET`  | `/api/search?q=` / `/api/search/hybrid?q=` | Keyword / hybrid (keyword + vector) search | ✅ |
+| `GET`  | `/api/system/status` | Status of MongoDB, Qdrant, Ollama and Whisper | ✅ |
+
+---
+
+## 🧪 Testing
+
+The server has an automated test suite (Node's built-in test runner + supertest) covering authentication, cross-user data isolation, meeting endpoints, streaming chat and retrieval logic. It needs MongoDB but not Ollama, Qdrant or Python.
+
+```bash
+cd server
+npm test
+```
+
+Tests use a separate database (`meetingbuddy_test` by default, override with `TEST_MONGO_URI`) and refuse to run against a database whose name does not contain "test". GitHub Actions runs the tests plus the client lint and build on every push (`.github/workflows/ci.yml`).
 
 ---
 
@@ -224,6 +243,12 @@ Whisper requires FFmpeg to extract audio from video containers. Ensure FFmpeg is
 
 **Transcription is very slow:**
 The system defaults to the `base` model. It uses a CUDA GPU (float16) when CTranslate2 can see one, otherwise it falls back to `cpu` with `int8` compute type. If it is still too slow, you can lower the model size by changing `WHISPER_MODEL=tiny` in your `.env` file. (Note: This trades accuracy for speed).
+
+**Speaker diarization does nothing / "403 … gated repo":**
+The pyannote models are gated. Sign in to Hugging Face with the account that owns `HF_TOKEN`, open [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) and [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0), and accept the terms on both pages. Then set `ENABLE_DIARIZATION=true` and re-process a meeting.
+
+**A meeting is stuck or its transcript looks wrong:**
+Open the meeting and use **Re-process**. "Re-transcribe from the recording" runs everything again; "Re-run AI analysis" keeps the transcript.
 
 ---
 

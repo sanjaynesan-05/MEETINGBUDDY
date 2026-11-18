@@ -12,6 +12,7 @@ const {
   getTranscript,
   getAnalysis,
   deleteMeeting,
+  reprocessMeeting,
 } = require('../controllers/meetingController');
 
 const router = express.Router();
@@ -74,6 +75,10 @@ router.get('/:id/media', async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to load recording.' });
   }
 });
+
+// @route   POST /api/meetings/:id/reprocess
+// @desc    Re-run transcription / AI analysis / embeddings for a meeting
+router.post('/:id/reprocess', reprocessMeeting);
 
 // @route   DELETE /api/meetings/:id
 // @desc    Delete a meeting

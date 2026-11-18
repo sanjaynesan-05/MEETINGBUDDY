@@ -30,8 +30,52 @@ class RagChatService {
 
     const prompt = this._buildPrompt(cleanQuestion, chunks, history);
     const ollamaResponse = await this._callOllama(prompt);
+    return this._finalize(ollamaResponse, chunks, retrievalSource, startTime);
+  }
 
-    const { answer, citedLabels } = this._parseResponse(ollamaResponse);
+  /**
+   * Same as chat(), but streams the answer while it is generated.
+   * Emits events through onEvent:
+   *   { type: 'context', chunksUsed, retrievalSource }  once retrieval is done
+   *   { type: 'token', text }                            for each generated piece
+   *   { type: 'done', ...result }                        final answer + citations (same shape as chat())
+   */
+  async chatStream({ question, meetingId, userId, conversationHistory, onEvent, signal }) {
+    const startTime = Date.now();
+    const cleanQuestion = (question || '').trim().slice(0, MAX_QUESTION_LENGTH);
+    if (!cleanQuestion) {
+      onEvent({ type: 'done', ...this._noContextResponse('Please provide a question.', startTime) });
+      return;
+    }
+
+    const history = this._boundHistory(conversationHistory);
+    const { chunks, source: retrievalSource } = await ragRetrieval.retrieveForChat({
+      question: cleanQuestion,
+      meetingId,
+      userId,
+    });
+    onEvent({ type: 'context', chunksUsed: chunks.length, retrievalSource });
+
+    if (!chunks || chunks.length === 0) {
+      onEvent({
+        type: 'done',
+        ...this._noContextResponse(
+          "I couldn't find that information in the meeting transcripts. The question may be outside the scope of the available meeting data.",
+          startTime,
+          retrievalSource
+        ),
+      });
+      return;
+    }
+
+    const prompt = this._buildPrompt(cleanQuestion, chunks, history);
+    const ollamaService = require('./ollama.service');
+    const raw = await ollamaService.askStream(prompt, (text) => onEvent({ type: 'token', text }), { signal });
+    onEvent({ type: 'done', ...this._finalize(raw, chunks, retrievalSource, startTime) });
+  }
+
+  _finalize(rawAnswer, chunks, retrievalSource, startTime) {
+    const { answer, citedLabels } = this._parseResponse(rawAnswer);
 
     const citations = citedLabels
       .map((label) => chunks.find((c) => c.sourceLabel === label))
@@ -45,17 +89,17 @@ class RagChatService {
 
     const finalAnswer = this._injectFallbackCitations(answer, citations, chunks);
 
-     return {
-       success: true,
-       answer: finalAnswer,
-       citations,
-       metadata: {
-         responseTime: Date.now() - startTime,
-         chunksUsed: chunks.length,
-         model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
-         retrievalSource,
-       },
-     };
+    return {
+      success: true,
+      answer: finalAnswer,
+      citations,
+      metadata: {
+        responseTime: Date.now() - startTime,
+        chunksUsed: chunks.length,
+        model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+        retrievalSource,
+      },
+    };
   }
 
   _boundHistory(history) {

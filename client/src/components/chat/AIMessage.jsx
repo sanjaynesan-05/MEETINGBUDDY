@@ -6,7 +6,7 @@ import ConfidenceBadge from './ConfidenceBadge';
 import CitationCard from './CitationCard';
 import MessageToolbar from './MessageToolbar';
 
-const AIMessage = ({ content, confidence, citations = [], metadata }) => {
+const AIMessage = ({ content, confidence, citations = [], metadata, streaming = false }) => {
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = () => {
@@ -21,13 +21,13 @@ const AIMessage = ({ content, confidence, citations = [], metadata }) => {
         <Bot size={20} />
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div className="ai-msg-bubble">
+        <div className="ai-msg-bubble" aria-busy={streaming}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {content}
           </ReactMarkdown>
         </div>
         
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', fontSize: 'var(--text-xs)', color: 'var(--md-on-surface-variant)' }}>
+        {!streaming && <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', fontSize: 'var(--text-xs)', color: 'var(--md-on-surface-variant)' }}>
           <MessageToolbar onCopy={handleCopy} copied={copied} />
           
           {confidence !== undefined && (
@@ -39,7 +39,7 @@ const AIMessage = ({ content, confidence, citations = [], metadata }) => {
               {(metadata.responseTime / 1000).toFixed(2)}s
             </span>
           )}
-        </div>
+        </div>}
 
         {citations && citations.length > 0 && (
           <div style={{ marginTop: '12px' }}>

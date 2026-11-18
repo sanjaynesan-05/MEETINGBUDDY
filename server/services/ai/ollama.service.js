@@ -155,6 +155,47 @@ class OllamaService {
             format: undefined,
         });
     }
+
+    /**
+     * Generic Q&A, streamed token by token.
+     * @param {string} prompt
+     * @param {(text: string) => void} onToken - called for each generated piece of text
+     * @param {{ signal?: AbortSignal }} [opts] - abort to stop generation (e.g. client disconnected)
+     * @returns {Promise<string>} the full answer
+     */
+    async askStream(prompt, onToken, { signal } = {}) {
+        await this.checkModelAvailability();
+        const { format, ...options } = this.defaultOptions; // free-text answer, not JSON
+        const stream = await ollama.chat({
+            model: this.model,
+            options,
+            messages: [{ role: "user", content: prompt }],
+            stream: true,
+        });
+
+        const onAbort = () => stream.abort();
+        if (signal) {
+            if (signal.aborted) onAbort();
+            else signal.addEventListener("abort", onAbort, { once: true });
+        }
+
+        let full = "";
+        try {
+            for await (const part of stream) {
+                const piece = part && part.message ? part.message.content : "";
+                if (piece) {
+                    full += piece;
+                    onToken(piece);
+                }
+            }
+        } catch (error) {
+            if (signal && signal.aborted) return full.trim(); // stopped on purpose
+            throw error;
+        } finally {
+            if (signal) signal.removeEventListener("abort", onAbort);
+        }
+        return full.trim();
+    }
 }
 
 module.exports = new OllamaService();

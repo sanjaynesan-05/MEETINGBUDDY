@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { SPOKEN_LANGUAGES } from '../utils/languages';
 import { useNavigate } from 'react-router-dom';
 import { meetingAPI } from '../services/meetingAPI';
 
@@ -22,6 +23,7 @@ export default function MeetingUpload() {
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [language, setLanguage] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -122,6 +124,9 @@ export default function MeetingUpload() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title.trim());
+    if (language) {
+      formData.append('language', language);
+    }
     if (description.trim()) {
       formData.append('description', description.trim());
     }
@@ -305,6 +310,24 @@ export default function MeetingUpload() {
                 rows={3}
                 style={{ height: 'auto', padding: 'var(--space-3) var(--space-4)', resize: 'vertical' }}
               />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="upload-language">
+                Spoken language
+              </label>
+              <select
+                id="upload-language"
+                className="form-input"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                aria-describedby="upload-language-help"
+              >
+                {SPOKEN_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+              </select>
+              <span id="upload-language-help" style={{ display: 'block', fontSize: 'var(--text-sm)', color: 'var(--md-on-surface-variant)', marginTop: 4 }}>
+                Pick the language for non-English meetings. Automatic detection can mistake them for English.
+              </span>
             </div>
           </>
         )}

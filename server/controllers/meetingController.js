@@ -2,9 +2,14 @@ const path = require('path');
 const fs = require('fs');
 const Meeting = require('../models/Meeting');
 const { getFileType } = require('../middleware/upload');
-const { transcribeFile } = require('../services/transcriptionService');
-const meetingProcessor = require('../services/ai/processors/meeting.processor');
-const embeddingService = require('../services/embeddings/embedding.service');
+const jobQueue = require('../services/processing/jobQueue');
+
+// Whisper language codes offered in the UI ('' = auto-detect).
+const SUPPORTED_LANGUAGES = ['', 'en', 'ta', 'hi', 'te', 'ml', 'kn', 'bn', 'mr', 'gu', 'ur'];
+const normalizeLanguage = (value) => {
+  const code = String(value || '').trim().toLowerCase();
+  return SUPPORTED_LANGUAGES.includes(code) ? code : null;
+};
 const embeddingStorage = require('../services/embeddings/embedding.storage');
 const qdrantStorage = require('../services/embeddings/qdrantStorage');
 
@@ -23,6 +28,11 @@ const uploadMeeting = async (req, res) => {
     }
 
     const { title, description } = req.body;
+    const languageHint = normalizeLanguage(req.body.language);
+    if (languageHint === null) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ success: false, message: 'Unsupported language code.', code: 'BAD_LANGUAGE' });
+    }
 
     if (!title || !title.trim()) {
       // Clean up uploaded file if title missing
@@ -47,6 +57,7 @@ const uploadMeeting = async (req, res) => {
       status: 'uploaded',
       transcriptionStatus: 'pending',
       uploadedBy: req.user._id,
+      languageHint,
     });
 
     console.log(`Audio uploaded`);
@@ -66,8 +77,8 @@ const uploadMeeting = async (req, res) => {
       },
     });
 
-    // Begin transcription asynchronously (non-blocking)
-    processTranscription(meeting._id, req.file.path);
+    // Transcription, AI analysis and embedding run in the background queue.
+    await jobQueue.enqueue(meeting._id, 'full');
 
   } catch (error) {
     console.error('Upload error:', error);
@@ -81,111 +92,6 @@ const uploadMeeting = async (req, res) => {
       success: false,
       message: 'Failed to upload meeting. Please try again.',
     });
-  }
-};
-
-// Async transcription processor (runs in background after response is sent)
-const processTranscription = async (meetingId, filePath) => {
-  const totalStartTime = Date.now();
-  let result;
-
-  try {
-    // Update status to transcribing
-    await Meeting.findByIdAndUpdate(meetingId, {
-      status: 'transcribing',
-      transcriptionStatus: 'processing',
-    });
-
-    console.log(`Starting WhisperX...`);
-
-    // Call Whisper (with optional diarization)
-    let lastProgressTime = 0;
-    const transcribeOptions = {
-      diarize: process.env.ENABLE_DIARIZATION === 'true',
-    };
-    result = await transcribeFile(filePath, transcribeOptions, async (progress) => {
-      // Throttle DB updates to once every 2 seconds to avoid slamming MongoDB
-      const now = Date.now();
-      if (now - lastProgressTime > 2000 || progress === 100) {
-        lastProgressTime = now;
-        await Meeting.findByIdAndUpdate(meetingId, {
-          transcriptionProgress: progress
-        }).catch(err => console.error('Failed to update progress in DB:', err));
-      }
-    });
-
-    console.log(`Transcription complete`);
-
-  } catch (error) {
-    console.error(`❌ Transcription failed for meeting ${meetingId}:`, error.message);
-
-    await Meeting.findByIdAndUpdate(meetingId, {
-      status: 'failed',
-      transcriptionStatus: 'failed',
-      transcriptionError: error.message,
-    });
-    return; // Stop execution on Whisper failure
-  }
-
-  // AI Processing Phase
-  let aiAnalysis = {}; // Default empty object if AI fails
-  try {
-    console.log(`Calling Ollama (${process.env.OLLAMA_MODEL || 'llama3.1:8b'})`);
-
-    // Use meetingProcessor.analyze instead of .process as verified in meeting.processor.js
-    aiAnalysis = await meetingProcessor.analyze(result.text);
-
-    console.log(`AI analysis complete`);
-  } catch (error) {
-    console.error(`❌ AI failed for meeting ${meetingId}:`, error.message);
-    // Continue execution to save transcript despite AI failure
-  }
-
-  // Save Results Phase
-  try {
-    console.log(`Saving transcript`);
-    console.log(`Formatting transcript`);
-    let formattedSegments = [];
-    let plainTextTranscript = result.text;
-    
-    // Format segments with speaker labels from diarization
-    const transcriptSegments = (result.segments || []).map((seg) => ({
-      start: seg.start,
-      end: seg.end,
-      text: seg.text,
-      speaker: seg.speaker || 'Unknown',
-    }));
-
-    // Update meeting with transcript and AI analysis
-    await Meeting.findByIdAndUpdate(meetingId, {
-      transcript: result.text,
-      transcriptSegments,
-      aiAnalysis: aiAnalysis,
-      language: result.language,
-      duration: result.duration,
-      wordCount: result.wordCount,
-      status: 'completed',
-      transcriptionStatus: 'completed',
-      transcriptionCompletedAt: new Date(),
-      transcriptionError: '',
-    });
-
-    console.log(`Meeting completed`);
-    
-    // Trigger embedding generation asynchronously in background
-    embeddingService.processMeetingEmbeddings(meetingId, result.text, {
-      transcriptSegments,
-      chunkType: 'Transcript',
-      meetingType: '',
-    }).catch((err) => {
-      console.error(`⚠️ Non-fatal embedding generation error for meeting ${meetingId}:`, err.message);
-    });
-
-    const executionTime = Date.now() - totalStartTime;
-    console.log(`⏱️ Execution time: ${executionTime}ms`);
-
-  } catch (error) {
-    console.error(`❌ Failed to save meeting results for ${meetingId}:`, error.message);
   }
 };
 
@@ -400,7 +306,57 @@ const deleteMeeting = async (req, res) => {
   }
 };
 
+// @desc    Re-run processing for an existing meeting
+// @route   POST /api/meetings/:id/reprocess   body: { mode: 'full' | 'analysis' | 'embeddings' }
+// @access  Private (owner only)
+const reprocessMeeting = async (req, res) => {
+  try {
+    const mode = (req.body && req.body.mode) || 'full';
+    const hasLanguage = req.body && Object.prototype.hasOwnProperty.call(req.body, 'language');
+    const languageHint = hasLanguage ? normalizeLanguage(req.body.language) : undefined;
+    if (languageHint === null) {
+      return res.status(400).json({ success: false, message: 'Unsupported language code.' });
+    }
+    if (!['full', 'analysis', 'embeddings'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'mode must be full, analysis or embeddings.' });
+    }
+    const meeting = await Meeting.findOne({ _id: req.params.id, uploadedBy: req.user._id })
+      .select('_id filePath transcript status')
+      .lean();
+    if (!meeting) {
+      return res.status(404).json({ success: false, message: 'Meeting not found.' });
+    }
+    if (jobQueue.isBusy(meeting._id)) {
+      return res.status(409).json({ success: false, message: 'This meeting is already being processed.' });
+    }
+    if (mode === 'full' && (!meeting.filePath || !fs.existsSync(meeting.filePath))) {
+      return res.status(409).json({ success: false, message: 'The original recording is no longer available, so it cannot be re-transcribed.' });
+    }
+    if (mode !== 'full' && !(meeting.transcript && meeting.transcript.trim())) {
+      return res.status(409).json({ success: false, message: 'This meeting has no transcript yet. Use a full re-process.' });
+    }
+
+    if (languageHint !== undefined) {
+      await Meeting.updateOne({ _id: meeting._id }, { languageHint });
+    }
+    await jobQueue.enqueue(meeting._id, mode);
+    return res.status(202).json({
+      success: true,
+      message: 'Re-processing started.',
+      mode,
+      queuePosition: jobQueue.position(meeting._id),
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({ success: false, message: 'Meeting not found.' });
+    }
+    console.error('Reprocess error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to start re-processing.' });
+  }
+};
+
 module.exports = {
+  reprocessMeeting,
   uploadMeeting,
   getAllMeetings,
   getMeeting,

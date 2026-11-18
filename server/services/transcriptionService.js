@@ -71,11 +71,10 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
       args.push('--language', language);
     }
     if (options.diarize) {
+      // HF_TOKEN reaches the script through the inherited environment.
+      // Never pass it as an argument: arguments are logged below and are
+      // visible in the OS process list.
       args.push('--diarize');
-      const hfToken = process.env.HF_TOKEN;
-      if (hfToken) {
-        args.push('--hf-token', hfToken);
-      }
     }
 
     const pythonExe = process.env.PYTHON_PATH || 'python';

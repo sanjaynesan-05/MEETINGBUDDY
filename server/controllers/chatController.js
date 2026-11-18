@@ -21,3 +21,51 @@ exports.sendChatMessage = async (req, res, next) => {
     });
   }
 };
+
+/**
+ * POST /api/chat/stream
+ * Streams the answer as Server-Sent Events over the POST response.
+ * Each event is one `data: <json>` line followed by a blank line:
+ *   {"type":"context","chunksUsed":5,"retrievalSource":"hybrid"}
+ *   {"type":"token","text":"..."}            (many)
+ *   {"type":"done","answer":...,"citations":[...],"metadata":{...}}
+ *   {"type":"error","message":"..."}
+ */
+exports.streamChatMessage = async (req, res) => {
+  const { question, meetingId, conversationHistory } = req.body || {};
+
+  res.status(200);
+  res.set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+
+  // Stop generating if the user navigates away or cancels.
+  const controller = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort();
+  });
+
+  const send = (event) => {
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  try {
+    await ragChatService.chatStream({
+      question,
+      meetingId: meetingId || null,
+      userId: req.user.id,
+      conversationHistory: conversationHistory || [],
+      onEvent: send,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    console.error('[ChatController] Stream error:', error.message);
+    send({ type: 'error', message: 'The assistant could not answer right now. Please try again.' });
+  } finally {
+    if (!res.writableEnded) res.end();
+  }
+};

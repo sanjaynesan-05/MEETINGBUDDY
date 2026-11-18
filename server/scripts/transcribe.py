@@ -433,13 +433,33 @@ def main():
                 if not hf_token:
                     raise ValueError("HF_TOKEN required for diarization")
 
-                diarization_pipeline = DiarizationPipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    use_auth_token=hf_token,
-                )
+                diar_model = os.environ.get("DIARIZATION_MODEL", "pyannote/speaker-diarization-3.1")
+                try:
+                    # pyannote.audio >= 4 renamed use_auth_token -> token
+                    diarization_pipeline = DiarizationPipeline.from_pretrained(diar_model, token=hf_token)
+                except TypeError:
+                    diarization_pipeline = DiarizationPipeline.from_pretrained(diar_model, use_auth_token=hf_token)
+                if diarization_pipeline is None:
+                    raise RuntimeError(
+                        f"Could not load {diar_model}. Accept the model's terms on huggingface.co "
+                        "and check that HF_TOKEN has access."
+                    )
 
-                diarization = diarization_pipeline(file_path)
-                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                import torch
+                if device == "cuda" and torch.cuda.is_available():
+                    diarization_pipeline.to(torch.device("cuda"))
+
+                # Decode audio ourselves and pass a waveform. pyannote's own file
+                # decoding goes through torchcodec, which fails to load against
+                # FFmpeg 8 on Windows.
+                from faster_whisper.audio import decode_audio
+                audio = decode_audio(file_path, sampling_rate=16000)
+                waveform = torch.from_numpy(audio).unsqueeze(0)  # (channel, time)
+
+                diarization = diarization_pipeline({"waveform": waveform, "sample_rate": 16000})
+                # pyannote >= 4 returns an output object; 3.x returns the Annotation itself
+                annotation = getattr(diarization, "speaker_diarization", diarization)
+                for turn, _, speaker in annotation.itertracks(yield_label=True):
                     speaker_segments.append({
                         "speaker": speaker,
                         "start": round(turn.start, 2),

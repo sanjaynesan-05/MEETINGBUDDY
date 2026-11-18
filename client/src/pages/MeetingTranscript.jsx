@@ -6,6 +6,7 @@ import ErrorState from '../components/common/ErrorState';
 import StatusChip from '../components/common/StatusChip';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import AIInsights from "../components/meeting/AIInsights/index";
+import ReprocessDialog from '../components/meeting/ReprocessDialog';
 import { formatDate } from '../utils/formatDate';
 import { formatDuration } from '../utils/formatDuration';
 import { useTranscript } from '../hooks/useTranscript';
@@ -14,7 +15,11 @@ export default function MeetingTranscript() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { meeting, loading, error } = useTranscript(id);
+  const { meeting, loading, error, refreshAndWatch } = useTranscript(id);
+  const [actionError, setActionError] = useState('');
+  const [showReprocess, setShowReprocess] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessError, setReprocessError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -63,11 +68,34 @@ export default function MeetingTranscript() {
       await meetingAPI.delete(id);
       navigate('/meetings', { replace: true });
     } catch {
-      setError('Failed to delete meeting.');
+      setActionError('Failed to delete meeting. Please try again.');
       setDeleting(false);
       setShowDeleteDialog(false);
     }
   };
+
+  const handleReprocess = async (mode, language) => {
+    setReprocessing(true);
+    setReprocessError('');
+    try {
+      await meetingAPI.reprocess(id, mode, language);
+      setShowReprocess(false);
+      await refreshAndWatch();
+    } catch (err) {
+      setReprocessError(err.response?.data?.message || 'Could not start re-processing.');
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
+  const isProcessing = meeting && (meeting.status === 'transcribing' || meeting.status === 'uploaded');
+  const STAGE_TEXT = {
+    queued: ['Waiting in the processing queue…', 'Another meeting is being processed first. This page will update automatically.'],
+    transcribing: ['Transcribing your meeting…', 'This may take a few minutes depending on the file size. The page will update automatically.'],
+    analyzing: ['Analyzing with AI…', 'Extracting the summary, decisions, action items and insights. This usually takes a few minutes.'],
+    embedding: ['Indexing for search and chat…', 'Almost done.'],
+  };
+  const [stageTitle, stageHelp] = STAGE_TEXT[meeting?.processingStage] || STAGE_TEXT.transcribing;
 
   // Highlight search matches in transcript
   const renderTranscript = useMemo(() => {
@@ -199,15 +227,15 @@ export default function MeetingTranscript() {
         <div className="card" style={{ padding: 'var(--space-8)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
             <span className="spinner spinner-sm" />
-            <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 500, color: 'var(--md-on-surface)' }}>
-              Transcribing your meeting...
+            <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 500, color: 'var(--md-on-surface)' }} aria-live="polite">
+              {stageTitle}
             </h2>
           </div>
           <p style={{ fontSize: 'var(--text-base)', color: 'var(--md-on-surface-variant)', marginBottom: 'var(--space-6)' }}>
-            This may take a few minutes depending on the file size. The page will update automatically.
+            {stageHelp}
           </p>
           
-          {(meeting.transcriptionProgress > 0) && (
+          {(meeting.processingStage === 'transcribing' && meeting.transcriptionProgress > 0) && (
             <div style={{ marginBottom: 'var(--space-6)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
                 <span style={{ fontSize: 'var(--text-sm)', color: 'var(--md-on-surface-variant)' }}>Processing audio...</span>
@@ -277,7 +305,7 @@ export default function MeetingTranscript() {
       )}
 
       {/* Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-6)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
         <Link
           to={`/chat?meeting=${id}`}
           className="btn btn-secondary"
@@ -288,6 +316,20 @@ export default function MeetingTranscript() {
           </svg>
           Ask AI about this meeting
         </Link>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <button
+          className="btn btn-secondary"
+          onClick={() => { setReprocessError(''); setShowReprocess(true); }}
+          disabled={isProcessing}
+          title={isProcessing ? 'This meeting is already being processed' : 'Run transcription or AI analysis again'}
+          id="meeting-reprocess"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4C7.58 4 4.01 7.58 4.01 12S7.58 20 12 20c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+          </svg>
+          Re-process
+        </button>
         <button
           className="btn btn-danger"
           onClick={() => setShowDeleteDialog(true)}
@@ -298,7 +340,21 @@ export default function MeetingTranscript() {
           </svg>
           Delete Meeting
         </button>
+        </div>
       </div>
+
+      {actionError && (
+        <div className="alert alert-error" role="alert" style={{ padding: 16, marginTop: 'var(--space-4)' }}>{actionError}</div>
+      )}
+
+      <ReprocessDialog
+        isOpen={showReprocess}
+        onCancel={() => setShowReprocess(false)}
+        onConfirm={handleReprocess}
+        loading={reprocessing}
+        error={reprocessError}
+        currentLanguage={meeting.languageHint || ''}
+      />
 
       <ConfirmDialog 
         isOpen={showDeleteDialog}

@@ -177,6 +177,19 @@ const meetingSchema = new mongoose.Schema(
       enum: ['pending', 'processing', 'completed', 'failed'],
       default: 'pending',
     },
+    // Spoken language chosen by the user (Whisper code, e.g. 'ta'). Empty = auto-detect.
+    // Auto-detection can mistake non-English speech for English and then
+    // "transcribe" it as invented English text, so users can pin it.
+    languageHint: {
+      type: String,
+      default: '',
+    },
+    // Fine-grained position in the processing pipeline (see services/processing).
+    processingStage: {
+      type: String,
+      enum: ['queued', 'transcribing', 'analyzing', 'embedding', 'done', 'failed', null],
+      default: null,
+    },
     embeddingStatus: {
       type: String,
       enum: ['pending', 'processing', 'completed', 'failed'],

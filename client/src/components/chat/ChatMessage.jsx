@@ -14,6 +14,7 @@ const ChatMessage = ({ message }) => {
       confidence={message.confidence}
       citations={message.citations}
       metadata={message.metadata}
+      streaming={message.streaming}
     />
   );
 };

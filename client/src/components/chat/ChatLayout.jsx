@@ -9,6 +9,7 @@ const ChatLayout = ({ initialMeetingId = 'all' }) => {
   const {
     messages,
     isLoading,
+    isStreaming,
     error,
     sendMessage,
     clearChat,
@@ -42,7 +43,7 @@ const ChatLayout = ({ initialMeetingId = 'all' }) => {
         />
 
         <div className="chat-input-area">
-          <ChatInput onSend={sendMessage} disabled={isLoading} />
+          <ChatInput onSend={sendMessage} disabled={isLoading || isStreaming} />
           <p className="chat-disclaimer">
             AI answers may vary. Always verify important information with the original transcript.
           </p>

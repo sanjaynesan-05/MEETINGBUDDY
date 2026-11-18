@@ -59,20 +59,22 @@ All core features work end to end. This was checked on 18 November 2026 with a r
 
 | # | Issue | Why it matters | Effort |
 |---|---|---|---|
-| 1 | The "Tamil audio" meeting has a hallucinated English transcript (from an old pipeline run) | Wrong data shows up in chat, analytics and the paper | S: add a "Re-process meeting" button (see 4.1) and run it |
-| 2 | Speaker diarization doesn't work (`torchcodec` vs FFmpeg 8) | Speaker labels power participant analytics and "who said what" | S–M: pass audio to pyannote as a waveform, or put FFmpeg 7 on the Python PATH |
+| 1 | ✅ **Fix done (Phase 1).** The "Tamil audio" meeting had a hallucinated English transcript | Wrong data showed up in chat, analytics and the paper | Root cause: Whisper's auto-detection picked English. Added a **spoken-language option** (upload and re-process). Re-transcribing with Tamil produced Tamil script (noisy: mixed Tamil–English speech, poor audio). The meeting was then deleted through the app's Delete button during analysis, which also removed its audio |
+| 2 | ⚠️ **Code fixed (Phase 1), needs one step from you.** Speaker diarization | Speaker labels power participant analytics and "who said what" | Audio now goes to pyannote as a waveform (no torchcodec), with pyannote 4 support. Accept the model terms on Hugging Face (see README → Troubleshooting) |
 | 3 | Google / Outlook calendar code isn't connected | The README advertises it | M: add OAuth routes and a "Connect calendar" button in Settings, or remove the claim from the README |
 | 4 | `STT_PROVIDER=whisperx` in `.env` is never read; `services/transcription/providers/` is empty | Confusing for anyone reading the setup | S: remove it, or implement the provider switch |
-| 5 | The client hard-codes `http://localhost:5000/api` | Breaks on any other host or port | S: use `import.meta.env.VITE_API_URL` and fall back to `/api` (the Vite proxy) |
-| 6 | Transcription and analysis run inside the web server process, with no queue | Two uploads at once compete for the 4 GB GPU; a restart leaves meetings stuck at "transcribing" | M: add a job queue with a concurrency of 1 and recover stuck jobs at startup |
+| 5 | ✅ **Done (Phase 1).** The client hard-coded `http://localhost:5000/api` | Broke on any other host or port | Uses `VITE_API_URL`, defaulting to `/api` (the Vite proxy) |
+| 6 | ✅ **Done (Phase 1).** Processing ran with no queue | Uploads competed for the GPU; restarts left meetings stuck | Background queue (`PROCESSING_CONCURRENCY`, default 1) that resumes interrupted jobs at startup |
 | 7 | The old `qdrant` Docker container is stopped but still exists | Disk clutter | S: `docker rm qdrant` |
+| 8 | **New (seen 18 Nov).** The meeting-type classifier fails validation ("meetingType must be a string") on some transcripts and isn't retried | That meeting gets no meeting type, which affects analytics filters | S: coerce or repair the model's output before validating (for example, take the first item when it returns a list) |
+| 9 | **New (seen 18 Nov).** Analysis stages run in parallel against one Ollama instance; on the 4 GB GPU requests queue up and hit `UND_ERR_HEADERS_TIMEOUT`, so one stage took 15+ minutes | Analysis of non-English or long meetings takes far longer than it should | M: run the 9 stages with a concurrency of 1–2 (or match `OLLAMA_NUM_PARALLEL`), as the paper's next steps already suggest |
 
 ---
 
 ## 4. New features
 
 ### 4.1 Meeting management
-- **Re-process a meeting.** Re-run transcription, analysis or embeddings on an existing meeting. This is needed for #1 and whenever a model is upgraded. *(S–M)*
+- ✅ **Re-process a meeting.** *Done in Phase 1:* a Re-process button on the meeting page re-runs transcription, analysis or indexing (`POST /api/meetings/:id/reprocess`).
 - **Edit a meeting.** Rename it, set the meeting type and date, and rename speakers ("SPEAKER_01" → "Priya"), with the change flowing into search and chat. *(M)*
 - **Edit and confirm action items.** Change the owner and due date, and mark an item verified, so tasks don't rely only on the LLM's guess. *(M)*
 - **Audio player synced to the transcript.** Clicking a line jumps the audio to that moment (the `/media` route already supports seeking). Chat citations would also jump to the exact moment. *(M)*
@@ -84,7 +86,7 @@ All core features work end to end. This was checked on 18 November 2026 with a r
 - **Import from Zoom, Google Meet or Teams.** Pull recordings and transcripts automatically. *(L)*
 
 ### 4.3 Chat and search
-- **Show answers as they're written.** Ollama can send the answer word by word. Answers currently take 15–25 s with nothing on screen; streaming makes them feel much faster. *(S–M)*
+- ✅ **Show answers as they're written.** *Done in Phase 1:* chat answers stream word by word (`POST /api/chat/stream`).
 - **Save chat history.** Keep conversations between sessions; the chat sidebar already has a place for them. *(M)*
 - **Ask across a date range or meeting type.** Expose the existing filters in the chat UI, for example "decisions from last month's planning meetings". *(S)*
 - **Follow-up suggestions.** After each answer, suggest 2–3 follow-up questions based on the retrieved passages. *(S)*
@@ -104,7 +106,7 @@ All core features work end to end. This was checked on 18 November 2026 with a r
 | **Re-ranker** after hybrid search (for example `bge-reranker-v2-m3`, run locally) | Better passage order before the answer is written; usually the biggest single quality gain in RAG | M |
 | **Meeting context on each passage** (prepend title, date and speaker before embedding) | Questions such as "What was discussed in the Tamil audio?" currently fail because passages don't know which meeting they're from | S–M |
 | **Multilingual embeddings** (`bge-m3` or `multilingual-e5`) | Tamil and Tamil–English (code-mixed) meetings become searchable; `nomic-embed-text` is English-only | M |
-| **Language handling in transcription** | Detect Tamil and English per segment; optionally store an English translation next to the original | M |
+| **Language handling in transcription** | *Started in Phase 1:* users can now choose the spoken language. Next: detect Tamil and English per segment (mixed speech), try `large-v3` (not turbo) for Tamil, and optionally store an English translation next to the original | M |
 | **Abstain when the answer isn't there** | A confidence score from retrieval, so the app says "not in your meetings" reliably instead of guessing | S–M |
 | **Model options for small GPUs** | Offer `qwen2.5:3b` for speed and 7B for quality, selected in Settings; keep both models loaded so the embedding model doesn't swap the LLM out | M |
 | **Long-meeting summarization** (map-reduce or hierarchical) | Meetings longer than about 1 hour exceed the context window | M |
@@ -114,8 +116,8 @@ All core features work end to end. This was checked on 18 November 2026 with a r
 
 ## 6. Engineering quality
 
-- **Automated tests.** Use `node:test` or Jest with supertest for the API. Turn the existing manual checks (the end-to-end and isolation tests from the November review) into real tests, starting with "user A cannot read user B's meeting". *(M)*
-- **CI with GitHub Actions.** Run lint, client build and API tests on every push. *(S)*
+- ✅ **Automated tests.** *Done in Phase 1:* 31 tests (`cd server && npm test`) covering auth, cross-user isolation, meeting endpoints, streaming chat and retrieval logic.
+- ✅ **CI with GitHub Actions.** *Done in Phase 1:* `.github/workflows/ci.yml` runs the tests, client lint and build on every push.
 - **Full Docker Compose.** Add MongoDB, the server and the client next to Qdrant, so the whole system starts with one command. Ollama and the GPU can stay on the host. *(M)*
 - **Check settings at startup.** Fail at boot if `JWT_SECRET`, `MONGO_URI` and similar are missing, instead of failing later. *(S)*
 - **Structured logging** (pino) with a request ID; drop the emoji `console.log` lines. *(S–M)*
@@ -150,7 +152,7 @@ Candidate journals: IEEE Access, Expert Systems with Applications, Multimedia To
 
 | Phase | Focus | Items |
 |---|---|---|
-| 1 (1–2 weeks) | Close known gaps | Section 3 #1, #2, #5, #6; streaming chat; re-process button; tests and CI |
+| 1 (1–2 weeks) | Close known gaps | ✅ Done 18 November 2026, except diarization, which needs the Hugging Face model terms accepted |
 | 2 (2–3 weeks) | Better answers | Re-ranker, meeting context on passages, abstention, speaker renaming, audio-synced transcript |
 | 3 (3–4 weeks) | Research evaluation | QMSum/AMI import, passage-level benchmark, answer-quality metrics, multilingual experiments |
 | 4 (ongoing) | Product polish | Teams and sharing, in-browser recording, PDF export, calendar sync, full Docker Compose |

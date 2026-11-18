@@ -32,6 +32,14 @@ export const meetingAPI = {
   /** Get AI analysis for a meeting */
   getAnalysis: (id) => apiClient.get(`/meetings/${id}/analysis`),
 
+  /**
+   * Re-run processing for a meeting.
+   * @param {'full'|'analysis'|'embeddings'} mode
+   * @param {string} [language] - Whisper code ('' = auto-detect); only used for 'full'
+   */
+  reprocess: (id, mode, language) =>
+    apiClient.post(`/meetings/${id}/reprocess`, language === undefined ? { mode } : { mode, language }),
+
   /** Delete a meeting */
   delete: (id) => apiClient.delete(`/meetings/${id}`),
 

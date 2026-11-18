@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
-import { sendChatMessage } from '../services/chatAPI';
+import { streamChatMessage } from '../services/chatAPI';
 
 export const useAIChat = () => {
   const [messages, setMessages] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // waiting for the first token
+  const [isStreaming, setIsStreaming] = useState(false); // answer is being written
   const [error, setError] = useState(null);
   const [meetingFilter, setMeetingFilter] = useState('all');
   const messagesRef = useRef([]);
@@ -35,35 +36,44 @@ export const useAIChat = () => {
         .slice(-10)
         .map(m => ({ role: m.role, content: m.content }));
 
-      const response = await sendChatMessage(question, {
-        ...filters,
-        conversationHistory,
-      });
-
-      if (response.success) {
-        const aiMsg = {
-          id: response.metadata?.requestId || Date.now().toString() + '-ai',
-          role: 'assistant',
-          content: response.answer,
-          citations: response.citations || [],
-          confidence: response.confidence || (response.metadata?.chunksUsed > 0 ? 0.8 : 0),
-          metadata: response.metadata,
-          createdAt: response.metadata?.generatedAt || new Date().toISOString()
-        };
-
+      const aiId = Date.now().toString() + '-ai';
+      const updateAi = (patch) => {
         setMessages((prev) => {
-          const updated = [...prev, aiMsg];
+          const exists = prev.some((m) => m.id === aiId);
+          const updated = exists
+            ? prev.map((m) => (m.id === aiId ? { ...m, ...(typeof patch === 'function' ? patch(m) : patch) } : m))
+            : [...prev, { id: aiId, role: 'assistant', content: '', citations: [], streaming: true, createdAt: new Date().toISOString(), ...(typeof patch === 'function' ? patch({ content: '' }) : patch) }];
           messagesRef.current = updated;
           return updated;
         });
-      } else {
-        throw new Error(response.error || 'Unknown error occurred');
-      }
+      };
+
+      let finished = false;
+      await streamChatMessage(question, { ...filters, conversationHistory }, (event) => {
+        if (event.type === 'token') {
+          setIsLoading(false);
+          setIsStreaming(true);
+          updateAi((m) => ({ content: (m.content || '') + event.text }));
+        } else if (event.type === 'done') {
+          finished = true;
+          updateAi({
+            content: event.answer,
+            citations: event.citations || [],
+            confidence: event.confidence || (event.metadata?.chunksUsed > 0 ? 0.8 : 0),
+            metadata: event.metadata,
+            streaming: false,
+          });
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        }
+      });
+      if (!finished) throw new Error('The answer was interrupted. Please try again.');
     } catch (err) {
       console.error('Chat hook error:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   }, [meetingFilter]);
 
@@ -98,6 +108,7 @@ export const useAIChat = () => {
   return {
     messages,
     isLoading,
+    isStreaming,
     error,
     sendMessage,
     clearChat,

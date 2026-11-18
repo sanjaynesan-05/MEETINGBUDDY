@@ -31,6 +31,8 @@ class NotificationService {
   }
 
   _initCronJobs() {
+    // No background timers under the test runner (they keep the process alive).
+    if (process.env.NODE_ENV === 'test') return;
     cron.schedule('0 8 * * *', () => {
       this._checkActionItemDeadlines().catch((err) =>
         console.error('[Notification Cron] Error:', err.message)

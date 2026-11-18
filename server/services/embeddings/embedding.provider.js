@@ -175,4 +175,5 @@ module.exports = {
   OllamaEmbeddingProvider,
   OpenAIEmbeddingProvider,
   MockEmbeddingProvider,
+  applyTaskPrefix,
 };

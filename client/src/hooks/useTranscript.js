@@ -41,6 +41,12 @@ export function useTranscript(meetingId) {
     }, 3000);
   }, [fetchMeeting, stopPolling]);
 
+  // Refresh now and keep polling until processing finishes (used after re-process).
+  const refreshAndWatch = useCallback(async () => {
+    await fetchMeeting();
+    startPolling();
+  }, [fetchMeeting, startPolling]);
+
   useEffect(() => {
     fetchMeeting().then((m) => {
       if (m && (m.status === 'transcribing' || m.status === 'uploaded')) {
@@ -50,5 +56,5 @@ export function useTranscript(meetingId) {
     return () => stopPolling();
   }, [fetchMeeting, startPolling, stopPolling]);
 
-  return { meeting, loading, error, fetchMeeting };
+  return { meeting, loading, error, fetchMeeting, refreshAndWatch };
 }
