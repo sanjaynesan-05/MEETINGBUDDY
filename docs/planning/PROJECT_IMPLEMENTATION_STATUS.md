@@ -1,7 +1,7 @@
 # 🧠 AI Meeting Intelligence System — Project Implementation Status
 
 **Document Version:** 2.0  
-**Date:** July 22, 2026  
+**Date:** July 22, 2026 (client file tree refreshed November 18, 2026)  
 **Author:** Principal AI Architect & Development Team  
 **Repository Root:** `d:\final year project\`
 
@@ -56,39 +56,35 @@ d:\final year project\
 │   └── src\
 │       ├── main.jsx                         # React DOM entry
 │       ├── App.jsx                          # Root component with layout & routing
+│       ├── index.css                        # Design system (Material Design 3 tokens)
 │       ├── components\
-│       │   ├── LoadingSpinner.jsx           # Spinner component
-│       │   ├── Navbar.jsx                   # Top header navigation
-│       │   ├── Sidebar.jsx                  # Collapsible sidebar nav
-│       │   ├── ProtectedRoute.jsx           # Authentication guard wrapper
-│       │   └── search\                      # Search UI Module Components
-│       │       ├── SearchToolbar.jsx
-│       │       ├── SearchFilters.jsx
-│       │       ├── SearchResults.jsx
-│       │       ├── SearchPagination.jsx
-│       │       ├── SearchSkeleton.jsx
-│       │       ├── SearchSuggestions.jsx
-│       │       ├── SearchStats.jsx
-│       │       ├── SearchEmpty.jsx
-│       │       ├── SearchError.jsx
-│       │       └── HighlightedSnippet.jsx
+│       │   ├── analytics\                   # Analytics dashboard charts & cards
+│       │   ├── auth\                        # ProtectedRoute guard
+│       │   ├── chat\                        # RAG chat UI (messages, citations, confidence)
+│       │   ├── common\                      # Buttons, cards, dialogs, loaders, empty/error states
+│       │   ├── dashboard\                   # Home dashboard widgets
+│       │   ├── layout\                      # Navbar & Sidebar
+│       │   ├── meeting\                     # AI insights, decisions, keywords, filters
+│       │   └── search\                      # Search UI module components
 │       ├── context\
-│       │   └── AuthContext.jsx              # Global authentication state context
+│       │   ├── AuthContext.jsx              # Global authentication state
+│       │   └── SearchContext.jsx            # Search state
 │       ├── pages\
-│       │   ├── Dashboard.jsx                # Analytics & Metrics Dashboard
-│       │   ├── Login.jsx                    # User Login page
-│       │   ├── Register.jsx                 # User Registration page
-│       │   ├── Meetings.jsx                 # Meeting Directory & List view
-│       │   ├── MeetingUpload.jsx            # File Upload drag-and-drop
-│       │   ├── MeetingTranscript.jsx        # Full Transcript & AI Analysis Viewer
-│       │   └── SearchPage.jsx               # Keyword & Filter Search Page
+│       │   ├── Dashboard.jsx                # Home dashboard
+│       │   ├── AnalyticsDashboard.jsx       # Organisation analytics
+│       │   ├── AIChatPage.jsx               # RAG chat with meeting history
+│       │   ├── TasksPage.jsx                # Action-item tracker
+│       │   ├── Login.jsx, Register.jsx      # Authentication pages
+│       │   ├── Meetings.jsx                 # Meeting directory
+│       │   ├── MeetingUpload.jsx            # Drag-and-drop upload
+│       │   ├── MeetingTranscript.jsx        # Transcript & AI analysis viewer
+│       │   └── SearchPage.jsx               # Keyword & hybrid search
 │       ├── services\
-│       │   ├── api.js                       # Core Axios instance & Auth/Meeting endpoints
-│       │   └── searchAPI.js                 # Search REST client service
-│       ├── hooks\
-│       │   └── useSearch.js                 # Search state & query custom hook
-│       └── styles\
-│           └── index.css                    # Design system (Material Design 3 tokens)
+│       │   ├── apiClient.js                 # Shared Axios instance & interceptors
+│       │   └── *API.js                      # auth, meeting, chat, search, analytics, dashboard, tasks
+│       ├── hooks\                           # useSearch, useChat, useAIChat, useAnalytics, useTranscript…
+│       ├── types\                           # Shape definitions (meeting, chat, analysis, dashboard)
+│       └── utils\                           # Formatting, storage, download helpers
 │
 ├── server\                                  # Express Backend
 │   ├── server.js                            # Express application entry point
@@ -145,7 +141,7 @@ d:\final year project\
 | **Auth** | User Registration & Login | 🟢 Completed | 100% | `authController.js`, `User.js`, `auth.js` |
 | **Auth** | JWT Guard & Token Refresh | 🟢 Completed | 100% | `middleware/auth.js`, `AuthContext.jsx` |
 | **Upload** | Drag-and-Drop & File Validation | 🟢 Completed | 100% | `MeetingUpload.jsx`, `upload.js` |
-| **Upload** | HTTP Upload Progress Bar | 🟢 Completed | 100% | `MeetingUpload.jsx`, `api.js` |
+| **Upload** | HTTP Upload Progress Bar | 🟢 Completed | 100% | `MeetingUpload.jsx`, `meetingAPI.js` |
 | **Transcription** | Speech-to-Text (`faster-whisper`) | 🟢 Completed | 100% | `transcribe.py`, `transcriptionService.js` |
 | **Transcription** | Real-time Progress Streaming | 🟢 Completed | 100% | `transcribe.py`, `MeetingTranscript.jsx` |
 | **AI Intelligence** | Executive Summary & Overview | 🟢 Completed | 100% | `ollama.service.js`, `meeting.processor.js` |

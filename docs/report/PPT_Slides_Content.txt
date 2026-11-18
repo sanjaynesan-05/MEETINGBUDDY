@@ -1,0 +1,223 @@
+AI MEETING INTELLIGENCE SYSTEM
+Privacy-Preserving, Locally Hosted Meeting Transcription, Extraction & Retrieval
+PPT SLIDE CONTENT (Professional Format)
+=====================================================
+
+
+SLIDE 1: TITLE
+-----------------------------------------------------
+AI Meeting Intelligence System
+A Privacy-Preserving Pipeline for Meeting Transcription,
+Structured Extraction, and Hybrid Retrieval
+
+Presented by: Sanjay Nesan (URK23AI1041)
+Course: 19CS2009 - Project Preparation
+Division of Data Science and Cyber Security
+School of Computer Science and Technology
+Karunya Institute of Technology and Sciences
+November 2026
+
+
+SLIDE 2: AGENDA
+-----------------------------------------------------
+- Introduction & Motivation
+- Literature Survey & Research Gap
+- Problem Statement & Objectives
+- System Architecture
+- Mathematical & Algorithmic Formulation
+- Implementation Overview
+- Results & Discussion
+- Limitations & Future Scope
+- Conclusion
+
+
+SLIDE 3: INTRODUCTION & MOTIVATION
+-----------------------------------------------------
+- Meetings generate knowledge that is often lost: missed decisions,
+  forgotten action items, unsearchable discussions
+- Commercial AI note-takers stop at surface-level summaries
+- Most tools route sensitive audio/transcripts through third-party
+  cloud APIs - a privacy risk for sensitive organisations
+- Need: a fully local, privacy-preserving pipeline from raw audio
+  to structured, searchable organisational memory
+
+
+SLIDE 4: LITERATURE SURVEY - KEY THREADS
+-----------------------------------------------------
+- Speech Recognition & Diarization: Whisper, WhisperX, pyannote.audio
+- Meeting Summarization: QMSum, AutoMin, action-item-driven pipelines
+- Retrieval-Augmented Generation: RAG, Dense Passage Retrieval,
+  Reciprocal Rank Fusion (RRF)
+- Hallucination Mitigation: SelfCheckGPT, entailment-based detection
+- Locally Hosted LLMs: Qwen2.5 family via Ollama
+
+
+SLIDE 5: RESEARCH GAP
+-----------------------------------------------------
+- Integration Gap: prior work solves ONE stage in isolation,
+  not the full audio-to-memory pipeline
+- Privacy/Locality Gap: most systems assume cloud-hosted models
+- Grounding-and-Fusion Gap: hallucination detection + hybrid
+  retrieval have not been combined in one deployed, local system
+
+
+SLIDE 6: PROBLEM STATEMENT
+-----------------------------------------------------
+How can meeting recordings be transformed into reliable, searchable
+organisational memory while keeping sensitive data on local
+infrastructure?
+
+Research Questions:
+- RQ1: Does parallel multi-stage LLM extraction reduce latency?
+- RQ2: Does hybrid keyword + vector retrieval improve search?
+- RQ3: Does transcript grounding reduce unsupported content?
+
+
+SLIDE 7: OBJECTIVES
+-----------------------------------------------------
+1. Build a modular, fully local meeting-intelligence architecture
+2. Develop a parallel nine-stage LLM extraction pipeline
+3. Add lexical-overlap transcript grounding (hallucination check)
+4. Build incremental chunking + embedding + hybrid retrieval (RRF)
+5. Functionally verify via automated tests and benchmarks
+
+
+SLIDE 8: SYSTEM ARCHITECTURE
+-----------------------------------------------------
+Layered 3-Tier Architecture:
+1. User Interface - React SPA (Upload, Chat, Search, Analytics)
+2. API Gateway - Node.js/Express, JWT Auth, Rate Limiting
+3. Speech Processing - faster-whisper + pyannote.audio
+4. Intelligence Engine - 9 Parallel LLM Extraction Stages (Ollama)
+5. Embedding Infrastructure - Chunking -> SHA-256 Dedup -> Embeddings
+6. Search & RAG Layer - Keyword + Vector Search -> RRF Fusion
+7. Data Layer - MongoDB + Qdrant Vector DB
+
+
+SLIDE 9: MATHEMATICAL FORMULATION - HIGHLIGHTS
+-----------------------------------------------------
+- Speaker Alignment: max-overlap heuristic between ASR & diarization
+- Extraction: 9 parallel LLM stages, 24,000-char context budget
+- Grounding Score: overlap_score(r) = |tokens(r) n tokens(T)| / |tokens(r)|
+  Threshold = 0.20 (20%)
+- Chunking: <= 500 chars/chunk, SHA-256 content hash for dedup
+- Embeddings: nomic-embed-text, 768 dimensions
+- Hybrid Retrieval: Reciprocal Rank Fusion, RRF(d) = sum 1/(k+rank),
+  k = 60
+
+
+SLIDE 10: ALGORITHMS
+-----------------------------------------------------
+Algorithm 1 - Parallel Multi-Stage Extraction
+- Truncate transcript -> dispatch 9 stages concurrently
+- Each stage: up to 3 retries + schema validation + grounding check
+- Merge & normalize into final structured JSON
+
+Algorithm 2 - Reciprocal Rank Fusion (k = 60)
+- Combine keyword-search and vector-search ranked lists
+- Score by rank position, not raw score - no normalisation needed
+
+
+SLIDE 11: TECHNOLOGY STACK
+-----------------------------------------------------
+- Frontend: React 19, Vite, Axios, Recharts
+- Backend: Node.js, Express 5
+- Database: MongoDB (Mongoose) + Qdrant (vector DB)
+- Security: JWT, bcrypt, Helmet, rate limiting
+- ASR: faster-whisper (CTranslate2, int8 quantized)
+- Diarization: pyannote.audio (speaker-diarization-3.1)
+- LLM: Qwen2.5-7B-Instruct via Ollama
+- Embeddings: nomic-embed-text (768-d)
+
+
+SLIDE 12: IMPLEMENTATION OVERVIEW
+-----------------------------------------------------
+- 9 independent extractor modules (Summary, Agenda, Decisions,
+  Action Items, Risks, Questions, Entities, Classifier, ConvIntel)
+- Promise.all() for true parallel execution
+- Exponential-backoff retry for transient errors
+- Automatic GPU -> CPU fallback on CUDA/OOM errors
+- 3-tier cascading retrieval fallback: Hybrid -> Keyword -> MongoDB
+- 9 automated test suites + 6 benchmark scripts with real JSON results
+
+
+SLIDE 13: RESULTS - EXTRACTION ACCURACY
+-----------------------------------------------------
+(Measured against manually annotated ground truth, 2 meetings)
+- Decisions:        F1 = 0.636
+- Action Items:      F1 = 0.727
+- Risks:            F1 = 0.250  (weakest category)
+- Unanswered Qs:     F1 = 1.000
+- Macro Average:     F1 = 0.653
+
+
+SLIDE 14: RESULTS - GROUNDING & RETRIEVAL
+-----------------------------------------------------
+Grounding (51 extracted items, 3 meetings):
+- 94.1% passed the 20% lexical-overlap grounding check
+
+Retrieval Effectiveness (35 queries, k=10):
+- Vector-only:   R@10 = 0.686, nDCG@10 = 0.339
+- Keyword-only:  R@10 = 0.000 (non-functional on this set)
+- Hybrid (RRF):  R@10 = 0.086 (regression - needs investigation)
+
+
+SLIDE 15: RESULTS - LATENCY & THROUGHPUT
+-----------------------------------------------------
+- Parallel extraction: 306.7s vs Sequential: 478.4s (~36% faster)
+  but 5/9 stages timed out under parallel load on 4GB VRAM GPU
+- Embedding: ~83 ms/chunk at steady state
+- RAG Chat: 11.6s mean end-to-end latency (hybrid retrieval)
+- GPU Memory: Qwen2.5-7B (Q4_K_M) peaks at 3.4GB / 4GB VRAM
+
+
+SLIDE 16: DISCUSSION - RESEARCH QUESTIONS
+-----------------------------------------------------
+- RQ1 (Parallel speed-up): Supported, but with a reliability
+  trade-off on memory-constrained GPUs
+- RQ2 (Hybrid > individual retrieval): NOT supported currently -
+  hybrid underperforms vector-only; keyword leg needs fixing
+- RQ3 (Grounding reduces unsupported content): Partially - acts
+  as an audit signal, inconsistent filtering across categories
+
+
+SLIDE 17: LIMITATIONS
+-----------------------------------------------------
+- Small evaluation set (2-3 meetings, 35 queries)
+- No WER (transcription) or DER (diarization) ground truth yet
+- Hardware-specific results (4GB VRAM GPU)
+- Grounding filter behaves inconsistently across categories
+
+
+SLIDE 18: FUTURE SCOPE
+-----------------------------------------------------
+Short-term: Fix hybrid-retrieval regression, unify grounding filter
+  behaviour, improve Risk extraction, persist pipeline telemetry
+
+Medium-term: GPU-aware concurrency scheduling, WER/DER evaluation
+  harness, stronger entailment-based grounding, multilingual support
+
+Long-term: Learned fusion vs RRF, domain fine-tuning, optional
+  cloud deployment mode, human evaluation study
+
+
+SLIDE 19: CONCLUSION
+-----------------------------------------------------
+- Fully local, privacy-preserving meeting-intelligence pipeline
+  implemented end-to-end and functionally verified
+- Core design (parallel extraction, grounding, chunking, RRF)
+  matches the formulated algorithms exactly in code
+- Real benchmark data shows strong results in some areas (embedding
+  throughput, extraction accuracy) and clear, actionable gaps in
+  others (hybrid retrieval, risk extraction)
+- Contribution: a systems-and-integration contribution combining
+  established techniques into one working local pipeline
+
+
+SLIDE 20: THANK YOU
+-----------------------------------------------------
+Thank You
+Questions & Discussion
+
+Sanjay Nesan | URK23AI1041
+19CS2009 - Project Preparation

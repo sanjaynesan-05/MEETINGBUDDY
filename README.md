@@ -1,6 +1,6 @@
 # 🧠 AI Meeting Intelligence System
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
 ![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react&logoColor=black)
 ![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
@@ -17,7 +17,7 @@ Built as a robust foundation for a comprehensive meeting intelligence platform, 
 ### 🟢 Currently Implemented
 * **Secure Authentication:** JWT-based user registration and login with bcrypt password hashing, HTTP-only cookies, and rate limiting.
 * **Seamless Media Uploads:** Drag-and-drop interface supporting major audio/video formats (MP3, WAV, M4A, MP4, etc.) up to 100MB.
-* **Privacy-First AI Transcription:** Utilizes `faster-whisper` (CTranslate2, int8 quantization) running entirely on local CPU, ensuring sensitive meeting data never leaves your server.
+* **Privacy-First AI Transcription:** Utilizes `faster-whisper` (CTranslate2, int8 quantization) running entirely on your own machine (CUDA GPU with float16 when available, automatic fallback to CPU int8), ensuring sensitive meeting data never leaves your server.
 * **Speaker Diarization:** Identifies and separates multiple speakers dynamically using `pyannote.audio`.
 * **Real-Time Progress Tracking:** Live transcription progress streamed from Python to the Node.js backend and displayed dynamically on the React frontend.
 * **AI Summarization & Action Items:** Automatic generation of meeting minutes, key takeaways, and action items utilizing a local Ollama integration (e.g. `qwen2.5:7b`).
@@ -54,7 +54,7 @@ The application utilizes a decoupled, modern three-tier architecture:
 
 **AI Pipeline (Node.js & Python)**
 * **Transcription Engine:** `faster-whisper` (Primary), `openai-whisper` (Fallback)
-* **Inference Backend (STT):** CTranslate2 (Optimized for CPU via int8 quantization)
+* **Inference Backend (STT):** CTranslate2 (CUDA float16 when a GPU is detected; CPU int8 fallback)
 * **Audio Processing:** FFmpeg (Resolved via WinGet/System PATH)
 * **LLM Engine:** Local Ollama (`qwen2.5:7b` via Node.js API)
 * **Vector Database:** Qdrant (for RAG embeddings and semantic search)
@@ -77,16 +77,26 @@ meeting-intelligence/
 │   └── vite.config.js      # Vite build configuration
 │
 ├── server/                 # Express Backend application
+│   ├── benchmarks/         # Extraction, retrieval, RAG & GPU benchmarks + results
 │   ├── config/             # Database connection setup
-│   ├── controllers/        # Request handlers (Auth, Meetings)
+│   ├── controllers/        # Request handlers (auth, meetings, chat, search, analytics, tasks…)
 │   ├── middleware/         # JWT verification, Multer upload config
-│   ├── models/             # Mongoose schemas (User, Meeting)
+│   ├── models/             # Mongoose schemas (User, Meeting, MeetingChunk, Notification)
 │   ├── routes/             # API endpoint definitions
-│   ├── scripts/            # Python AI integration (transcribe.py)
-│   ├── services/           # Child process orchestration
-│   └── uploads/            # Local storage for audio/video files
+│   ├── scripts/            # Python transcription (transcribe.py) & maintenance scripts
+│   ├── services/           # Transcription, AI extraction, embeddings, search, analytics, calendar
+│   ├── src/modules/ai/     # Modular RAG pipeline exposed under /api/ai
+│   ├── tests/              # Manual test scripts
+│   └── uploads/            # Private storage for audio/video files (not publicly served)
 │
-└── PROJECT_IMPLEMENTATION_STATUS.md  # Detailed technical documentation
+├── docs/
+│   ├── paper/              # IEEE paper source (LaTeX) and reviewer responses
+│   ├── figs/               # Figures referenced by the paper
+│   ├── report/             # Lab record, literature survey, slide content
+│   ├── planning/           # PRD, timeline, phase goals, implementation status
+│   ├── research/           # Research diagnostics output
+│   └── archive/            # Older paper source bundle
+└── photos/                 # README images
 ```
 
 ---
@@ -198,7 +208,7 @@ npm run dev
 Whisper requires FFmpeg to extract audio from video containers. Ensure FFmpeg is installed on your OS. If it is not in your system PATH, you must explicitly set the absolute path to `ffmpeg.exe` in the `server/.env` file under the `FFMPEG_PATH` variable.
 
 **Transcription is very slow:**
-The system defaults to the `base` model running on `cpu` with `int8` compute type. If it is still too slow, you can lower the model size by changing `WHISPER_MODEL=tiny` in your `.env` file. (Note: This trades accuracy for speed).
+The system defaults to the `base` model. It uses a CUDA GPU (float16) when CTranslate2 can see one, otherwise it falls back to `cpu` with `int8` compute type. If it is still too slow, you can lower the model size by changing `WHISPER_MODEL=tiny` in your `.env` file. (Note: This trades accuracy for speed).
 
 ---
 
