@@ -1,8 +1,14 @@
+const { isMostlyNonLatin } = require("../utils/promptBuilder");
+
 class MeetingSchemaValidator {
     
     verifySemanticMatch(text, transcript, itemType) {
         if (!transcript) return false;
         if (!text || typeof text !== "string") return false;
+
+        // Extractors answer in English. For a Tamil/Hindi/... transcript a
+        // word-overlap check would reject every item, so skip it.
+        if (isMostlyNonLatin(transcript)) return true;
 
         const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3);
         const transcriptLower = transcript.toLowerCase();

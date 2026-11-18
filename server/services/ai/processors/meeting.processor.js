@@ -1,6 +1,7 @@
 const validator = require("../validators/meetingSchema");
 const normalizer = require("../utils/responseNormalizer");
 const retryHandler = require("../utils/retryHandler");
+const { fitTranscriptToContext, estimateTokens } = require("../utils/promptBuilder");
 
 const summaryExtractor = require("../extractors/summaryExtractor");
 const agendaExtractor = require("../extractors/agendaExtractor");
@@ -17,12 +18,21 @@ class MeetingProcessor {
         console.log("Starting Modular Meeting Processor pipeline...");
         const startTime = Date.now();
 
-        // Truncate to save context window and avoid OOM
-        const maxChars = parseInt(process.env.MAX_CONTEXT_CHARACTERS || process.env.MAX_CONTEXT || "24000", 10);
-        const processingTranscript = transcript.length > maxChars 
-            ? transcript.substring(0, maxChars) + "\n...[TRUNCATED]" 
-            : transcript;
-        console.log(`Transcript length: ${transcript.length} chars. Processing: ${processingTranscript.length} chars.`);
+        // Fit the transcript into the model's context window. The limit must be
+        // in tokens, not characters: Tamil uses ~1.2 tokens/char vs ~0.25 for
+        // English, so a 24000-char cap overflowed num_ctx and Ollama silently
+        // dropped the prompt's instructions.
+        const maxChars = parseInt(process.env.MAX_CONTEXT_CHARACTERS || "24000", 10);
+        const numCtx = parseInt(process.env.MAX_CONTEXT || "8192", 10);
+        const charCapped = transcript.length > maxChars ? transcript.substring(0, maxChars) : transcript;
+        const fitted = fitTranscriptToContext(charCapped, numCtx);
+        let processingTranscript = fitted.text; // carries a [TRUNCATED] marker if cut
+        if (!fitted.truncated && charCapped !== transcript) processingTranscript += "\n...[TRUNCATED]";
+        console.log(
+            `Transcript length: ${transcript.length} chars (~${estimateTokens(transcript)} tokens). ` +
+            `Processing: ${processingTranscript.length} chars (num_ctx=${numCtx}` +
+            `${processingTranscript !== transcript ? ", truncated to fit" : ""}).`
+        );
 
         // Default empty structure
         let finalJson = {

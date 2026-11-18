@@ -190,34 +190,14 @@ def select_device(model_name="large-v3-turbo"):
         print(f"DIAGNOSTICS: gpu_fallback_reason={device_info['gpu_fallback_reason']}", file=sys.stderr)
         return device_info
 
-    # --- Attempt CUDA initialization with faster-whisper ---
+    # CUDA is usable. The model itself is loaded once in main(); if that load
+    # fails (e.g. VRAM held by another process) main() falls back to CPU.
+    # (Previously a throwaway probe model was loaded here, doubling load time.)
     device_info['gpu_attempted'] = True
-    try:
-        from faster_whisper import WhisperModel
-        # Attempt to initialize the model on CUDA. This is the definitive test —
-        # it verifies that CTranslate2 can actually load CUDA libraries and
-        # allocate GPU memory for the requested model.
-        _probe_model = WhisperModel(
-            model_name,
-            device="cuda",
-            compute_type="float16",
-        )
-        del _probe_model  # Release GPU memory immediately
-
-        # Success — use CUDA
-        device_info['device'] = 'cuda'
-        device_info['compute_type'] = 'float16'
-        device_info['cpu_threads'] = None  # Not used in GPU mode
-        print("DIAGNOSTICS: gpu_initialization=success", file=sys.stderr)
-        return device_info
-
-    except Exception as e:
-        device_info['gpu_fallback_reason'] = (
-            f"WhisperModel CUDA initialization failed: {type(e).__name__}: {e}. "
-            f"Falling back to CPU."
-        )
-        print(f"DIAGNOSTICS: gpu_fallback_reason={device_info['gpu_fallback_reason']}", file=sys.stderr)
-        return device_info
+    device_info['device'] = 'cuda'
+    device_info['compute_type'] = os.environ.get('WHISPER_COMPUTE_TYPE') or 'int8_float16'
+    device_info['cpu_threads'] = None  # Not used in GPU mode
+    return device_info
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +215,8 @@ def main():
                         help='Enable speaker diarization with pyannote.audio')
     parser.add_argument('--hf-token', type=str, default=None,
                         help='HuggingFace token for pyannote.audio models')
+    parser.add_argument('--translate', action='store_true',
+                        help='Also produce an English translation when the audio is not English')
     args = parser.parse_args()
 
     # 1. Resolve absolute path
@@ -290,6 +272,9 @@ def main():
     try:
         start_time = time.time()
 
+        translation_text = None       # set by the faster-whisper path with --translate
+        translation_segments = None
+
         # Default device info (used by openai-whisper fallback path)
         device = "cpu"
         compute_type = "int8"
@@ -340,14 +325,23 @@ def main():
                 pass
 
             # Build model kwargs
-            model_kwargs = {
-                "device": device,
-                "compute_type": compute_type,
-            }
-            if device == "cpu" and cpu_threads:
-                model_kwargs["cpu_threads"] = cpu_threads
-
-            model = WhisperModel(args.model, **model_kwargs)
+            model = None
+            if device == "cuda":
+                try:
+                    model = WhisperModel(args.model, device="cuda", compute_type=compute_type)
+                    print("DIAGNOSTICS: gpu_initialization=success", file=sys.stderr)
+                except Exception as e:
+                    device_info['gpu_fallback_reason'] = (
+                        f"WhisperModel CUDA initialization failed: {type(e).__name__}: {e}. "
+                        f"Falling back to CPU."
+                    )
+                    print(f"DIAGNOSTICS: gpu_fallback_reason={device_info['gpu_fallback_reason']}", file=sys.stderr)
+                    device, compute_type, cpu_threads = "cpu", "int8", os.cpu_count()
+                    device_info.update(device=device, compute_type=compute_type, cpu_threads=cpu_threads)
+            if model is None:
+                model = WhisperModel(args.model, device="cpu", compute_type=compute_type,
+                                     cpu_threads=cpu_threads or 0)
+            print(f"DIAGNOSTICS: final_device={device} compute_type={compute_type}", file=sys.stderr)
 
             transcribe_opts = {
                 "beam_size": 1,               # greedy decoding — fastest
@@ -355,42 +349,87 @@ def main():
                 "vad_parameters": {
                     "min_silence_duration_ms": 500,
                 },
+                # Feeding previous text back in, plus temperature fallback,
+                # caused runaway repetition loops (and many slow re-decodes)
+                # on Tamil/code-mixed audio.
+                "condition_on_previous_text": False,
+                "temperature": 0.0,
             }
             if args.language:
                 transcribe_opts["language"] = args.language
 
             print_status("TRANSCRIBING")
-            segments_gen, info = model.transcribe(file_path, **transcribe_opts)
+            batch_size = int(os.environ.get('WHISPER_BATCH_SIZE') or 8)
+            batched = None
+            if device == "cuda" and batch_size > 1:
+                # Batched inference: decodes several VAD chunks in parallel on
+                # the GPU — ~4-10x faster than sequential decoding.
+                from faster_whisper import BatchedInferencePipeline
+                print(f"DIAGNOSTICS: batch_size={batch_size}", file=sys.stderr)
+                batched = BatchedInferencePipeline(model=model)
+
+            def start_pass(**opts):
+                if batched is not None:
+                    return batched.transcribe(file_path, batch_size=batch_size, **opts)
+                return model.transcribe(file_path, **opts)
+
+            last_progress = -1.0
+
+            def collect(segments_gen, duration_s, lo, hi):
+                """Drain a segment generator, emitting PROGRESS scaled to [lo, hi]."""
+                nonlocal last_progress
+                out = []
+                for seg in segments_gen:
+                    out.append({
+                        "start": round(seg.start, 2),
+                        "end": round(seg.end, 2),
+                        "text": seg.text.strip(),
+                    })
+                    if duration_s > 0:
+                        progress = min(hi, lo + (seg.end / duration_s) * (hi - lo))
+                        # Deduplicate: only emit if progress changed by at least 0.1%
+                        if progress - last_progress >= 0.1 or progress >= 100.0:
+                            last_progress = progress
+                            print(f"PROGRESS:{progress:.1f}")
+                            sys.stdout.flush()
+                return out
+
+            segments_gen, info = start_pass(**transcribe_opts)
 
             total_duration = info.duration
+            detected_language = info.language or "en"
             print(f"DIAGNOSTICS: audio_duration_seconds={total_duration}", file=sys.stderr)
             print(f"DIAGNOSTICS: detected_language={info.language or 'unknown'}", file=sys.stderr)
 
-            segments_list = []
-            last_progress = -1.0
-            for seg in segments_gen:
-                segments_list.append({
-                    "start": round(seg.start, 2),
-                    "end": round(seg.end, 2),
-                    "text": seg.text.strip(),
-                })
-                # Emit progress for Node.js to read
-                if total_duration > 0:
-                    progress = min(100.0, (seg.end / total_duration) * 100)
-                    # Deduplicate: only emit if progress changed by at least 0.1%
-                    if progress - last_progress >= 0.1 or progress >= 100.0:
-                        last_progress = progress
-                        print(f"PROGRESS:{progress:.1f}")
-                        sys.stdout.flush()
+            # Non-English audio also gets an English translation (Whisper's
+            # translate task, straight from the audio). The LLM analysis runs on
+            # it: qwen reads Tamil poorly and Tamil costs ~4x the tokens.
+            do_translate = args.translate and detected_language != "en"
+            split = 50.0 if do_translate else 100.0
 
+            segments_list = collect(segments_gen, total_duration, 0.0, split)
             text = " ".join(s["text"] for s in segments_list)
-            detected_language = info.language or "en"
             duration = segments_list[-1]["end"] if segments_list else 0
+
+            translation_text = None
+            translation_segments = None
+            if do_translate:
+                print_status("TRANSLATING")
+                t_start = time.time()
+                translate_gen, _ = start_pass(**{**transcribe_opts,
+                                                 "task": "translate",
+                                                 "language": detected_language})
+                translation_segments = collect(translate_gen, total_duration, split, 100.0)
+                translation_text = " ".join(s["text"] for s in translation_segments)
+                print(f"DIAGNOSTICS: translation_seconds={round(time.time() - t_start, 2)}", file=sys.stderr)
 
             # Ensure 100% progress is emitted if not already
             if last_progress < 100.0:
                 print("PROGRESS:100.0")
                 sys.stdout.flush()
+
+            # Free VRAM before diarization (4 GB card).
+            del batched, model
 
         else:
             # ---- openai-whisper fallback ----
@@ -523,6 +562,8 @@ def main():
             "processingTime": elapsed,
             "diagnostics": diagnostics,
             "segments": segments_list if segments_list else None,
+            "translation": translation_text,
+            "translationSegments": translation_segments,
             "speakers": list(set(s["speaker"] for s in speaker_segments if "speaker" in s)) if speaker_segments else None,
         }
 

@@ -70,6 +70,10 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
     if (language) {
       args.push('--language', language);
     }
+    // English translation of non-English audio, used as the LLM analysis input.
+    if (process.env.WHISPER_TRANSLATE_FOR_ANALYSIS !== 'false') {
+      args.push('--translate');
+    }
     if (options.diarize) {
       // HF_TOKEN reaches the script through the inherited environment.
       // Never pass it as an argument: arguments are logged below and are
@@ -150,7 +154,7 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
         }
 
         if (line.startsWith('STATUS:')) {
-          console.log(`[WhisperX] Status: ${line.substring(8).trim()}`);
+          console.log(`[WhisperX] Status: ${line.substring(7).trim()}`);
           continue;
         }
 
@@ -223,6 +227,8 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
           wordCount: result.wordCount,
           segments: result.segments || null,
           speakers: result.speakers || null,
+          translation: result.translation || null,
+          translationSegments: result.translationSegments || null,
         });
       } catch (parseError) {
         reject(new Error(`Failed to parse Whisper output: ${stdoutData.substring(0, 500)}`));
@@ -238,9 +244,40 @@ const runWhisper = (filePath, options = {}, onProgress = null) => {
   });
 };
 
+/**
+ * Unload any models Ollama keeps resident in VRAM. On a 4 GB GPU a loaded
+ * qwen2.5:7b leaves no room for Whisper, so CUDA init fails and transcription
+ * silently falls back to the (10x slower) CPU. Ollama reloads models on demand
+ * for the later analyze/embed stages. Best-effort: never blocks transcription.
+ */
+async function releaseOllamaVram() {
+  if (process.env.WHISPER_UNLOAD_OLLAMA === 'false') return;
+  const base = (process.env.OLLAMA_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/$/, '');
+  try {
+    const ps = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(3000) });
+    if (!ps.ok) return;
+    const { models = [] } = await ps.json();
+    for (const m of models) {
+      const name = m.name || m.model;
+      const body = JSON.stringify({ model: name, keep_alive: 0 });
+      const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(10000) };
+      // Embedding-only models reject /api/generate, so fall back to /api/embed.
+      const res = await fetch(`${base}/api/generate`, opts).catch(() => null);
+      if (!res || !res.ok) {
+        await fetch(`${base}/api/embed`, { ...opts, body: JSON.stringify({ model: name, input: [], keep_alive: 0 }) }).catch(() => null);
+      }
+      console.log(`[TranscriptionService] Unloaded Ollama model "${name}" to free GPU memory for Whisper`);
+    }
+  } catch (_) {
+    // Ollama not running — nothing to free.
+  }
+}
+
 const transcribeFile = async (filePath, options = {}, onProgress = null) => {
   let lastError;
   const maxAttempts = MAX_RETRIES + 1;
+
+  await releaseOllamaVram();
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

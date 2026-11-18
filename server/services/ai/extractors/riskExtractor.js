@@ -1,5 +1,6 @@
 ﻿const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
+const { buildExtractionPrompt } = require("../utils/promptBuilder");
 
 const PROMPT = `
 You are an AI meeting assistant. Extract ONLY genuine risks, blockers, unresolved concerns, or potential problems explicitly supported by the transcript.
@@ -41,7 +42,7 @@ Transcript:
 
 class RiskExtractor {
     async extract(transcript) {
-        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript || "");
+        const prompt = buildExtractionPrompt(PROMPT, transcript || "");
         const response = await ai.chat(prompt);
         return parser.parse(response);
     }

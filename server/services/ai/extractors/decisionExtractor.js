@@ -1,5 +1,6 @@
 ﻿const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
+const { buildExtractionPrompt } = require("../utils/promptBuilder");
 
 const PROMPT = `
 You are an AI meeting assistant. Extract ONLY confirmed decisions explicitly stated in the transcript.
@@ -40,7 +41,7 @@ Transcript:
 
 class DecisionExtractor {
     async extract(transcript) {
-        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript || "");
+        const prompt = buildExtractionPrompt(PROMPT, transcript || "");
         const response = await ai.chat(prompt);
         return parser.parse(response);
     }

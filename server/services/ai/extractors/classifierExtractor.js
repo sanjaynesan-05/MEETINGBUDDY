@@ -1,5 +1,6 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
+const { buildExtractionPrompt } = require("../utils/promptBuilder");
 
 const PROMPT = `
 You are an AI meeting assistant. Classify the meeting type and determine if a follow-up is required.
@@ -18,7 +19,7 @@ Transcript:
 
 class ClassifierExtractor {
     async extract(transcript) {
-        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const prompt = buildExtractionPrompt(PROMPT, transcript || "");
         const response = await ai.chat(prompt);
         return parser.parse(response);
     }

@@ -59,6 +59,12 @@ const meetingSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Whisper's English translation of non-English audio (empty for English
+    // meetings). The AI analysis runs on this; `transcript` stays the original.
+    transcriptEnglish: {
+      type: String,
+      default: '',
+    },
     aiAnalysis: {
   overview: {
     type: String,

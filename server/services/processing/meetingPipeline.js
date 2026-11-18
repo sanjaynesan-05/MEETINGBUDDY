@@ -62,8 +62,14 @@ async function transcribeStage(meeting) {
     speaker: seg.speaker || 'Unknown',
   }));
 
+  const transcriptEnglish = result.translation || '';
+  if (transcriptEnglish) {
+    console.log(`[Pipeline] English translation ready (${transcriptEnglish.split(/\s+/).length} words) — used for AI analysis`);
+  }
+
   await Meeting.findByIdAndUpdate(id, {
     transcript: result.text,
+    transcriptEnglish,
     transcriptSegments,
     language: result.language,
     duration: result.duration,
@@ -72,7 +78,7 @@ async function transcribeStage(meeting) {
     transcriptionProgress: 100,
     transcriptionCompletedAt: new Date(),
   });
-  return { transcript: result.text, transcriptSegments };
+  return { transcript: result.text, transcriptEnglish, transcriptSegments };
 }
 
 async function analyzeStage(meetingId, transcript) {
@@ -115,16 +121,20 @@ async function runPipeline(meetingId, mode = 'full') {
     if (!meeting) return; // deleted while queued
 
     let transcript = meeting.transcript;
+    let transcriptEnglish = meeting.transcriptEnglish || '';
     let transcriptSegments = meeting.transcriptSegments || [];
 
     if (stages.includes('transcribe')) {
-      ({ transcript, transcriptSegments } = await transcribeStage(meeting));
+      ({ transcript, transcriptEnglish, transcriptSegments } = await transcribeStage(meeting));
     } else if (!transcript) {
       throw new Error('Meeting has no transcript yet; run a full re-process instead.');
     }
 
     if (stages.includes('analyze')) {
-      await analyzeStage(meetingId, transcript);
+      // Prefer the English translation: the LLM understands it far better and
+      // it needs ~4x fewer tokens than e.g. Tamil. Meetings transcribed before
+      // translation existed fall back to the original transcript.
+      await analyzeStage(meetingId, transcriptEnglish || transcript);
     }
 
     if (stages.includes('embed')) {

@@ -1,5 +1,6 @@
 const ai = require("../ollama.service");
 const parser = require("../parser/jsonParser");
+const { buildExtractionPrompt } = require("../utils/promptBuilder");
 
 const PROMPT = `
 You are an AI meeting assistant. Extract the agenda items and major discussion points from the transcript.
@@ -17,7 +18,7 @@ Transcript:
 
 class AgendaExtractor {
     async extract(transcript) {
-        const prompt = PROMPT.replace("{{TRANSCRIPT}}", transcript);
+        const prompt = buildExtractionPrompt(PROMPT, transcript || "");
         const response = await ai.chat(prompt);
         return parser.parse(response);
     }
